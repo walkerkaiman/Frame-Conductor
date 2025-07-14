@@ -25,12 +25,12 @@ except ImportError:
 class SACNSender:
     """Handles sACN communication for sending frame numbers."""
     
-    def __init__(self, universe: int = 999):
+    def __init__(self, universe: int = 1):
         """
         Initialize the sACN sender.
         
         Args:
-            universe (int): sACN universe to send to (default: 999)
+            universe (int): sACN universe to send to (default: 1)
         """
         self.universe = universe
         self.sender = None
