@@ -53,6 +53,7 @@ def run_headless(target_frame, fps):
     quit_requested = False
     current_frame = 0
     lock = threading.Lock()
+    last_paused_state = True
 
     def on_frame_sent(frame):
         nonlocal current_frame
@@ -62,7 +63,7 @@ def run_headless(target_frame, fps):
     sender.set_frame_callback(on_frame_sent)
 
     def sender_thread_func():
-        nonlocal running, paused, reset_requested, status
+        nonlocal running, paused, reset_requested, status, last_paused_state
         while not quit_requested:
             if running and not paused:
                 if sender.is_running:
@@ -82,9 +83,10 @@ def run_headless(target_frame, fps):
                 paused = True
                 running = False
             else:
-                if sender.is_running:
-                    sender.pause_sending()
+                if sender.is_running and not last_paused_state:
+                    sender.pause()
                     status = "Paused"
+                    last_paused_state = True
                 time.sleep(0.05)
         sender.stop_sending()
         status = "Stopped"
@@ -109,9 +111,17 @@ def run_headless(target_frame, fps):
                             running = True
                             paused = False
                             status = "Running"
+                            if last_paused_state:
+                                sender.resume()
+                                last_paused_state = False
                         else:
                             paused = not paused
                             status = "Paused" if paused else "Running"
+                            if paused:
+                                sender.pause()
+                            else:
+                                sender.resume()
+                            last_paused_state = paused
                     elif key == "r":
                         reset_requested = True
                         status = "Reset"
@@ -132,9 +142,17 @@ def run_headless(target_frame, fps):
                             running = True
                             paused = False
                             status = "Running"
+                            if last_paused_state:
+                                sender.resume()
+                                last_paused_state = False
                         else:
                             paused = not paused
                             status = "Paused" if paused else "Running"
+                            if paused:
+                                sender.pause()
+                            else:
+                                sender.resume()
+                            last_paused_state = paused
                     elif key == "r":
                         reset_requested = True
                         status = "Reset"
