@@ -114,3 +114,43 @@ This application is designed to be modular and maintainable:
 - Clear separation between GUI, business logic, and configuration
 - Type hints for better code documentation
 - Comprehensive error handling 
+
+# Headless Mode (No GUI)
+
+Frame Conductor can be run in headless (no-GUI) mode for use in terminals or scripts. This mode provides interactive keyboard controls and a real-time progress bar in the terminal.
+
+## Launching Headless Mode
+
+Run with the `--headless` flag:
+
+```
+python main.py --headless [--target-frame N] [--fps X]
+```
+
+- `--headless` : Run without the GUI, in terminal mode
+- `--target-frame N` : Set the target frame number (default: 1000)
+- `--fps X` : Set the frame rate in frames per second (default: 30)
+
+## Example
+
+```
+python main.py --headless --target-frame 5000 --fps 24
+```
+
+## Keyboard Controls (while running)
+
+When running in headless mode, you can control the sender interactively:
+
+- `p` : Play/Pause
+- `r` : Reset (sets frame to 0 and pauses)
+- `q` : Quit
+
+A real-time progress bar will show:
+- Current progress as a percentage
+- Current frame and target frame
+- Current status (Running, Paused, Reset, Stopped)
+
+## Notes
+- The program starts in Paused state. Press `p` to begin sending frames.
+- All settings available in the GUI (target frame, FPS) can be set via command-line arguments in headless mode.
+- The headless mode uses the same backend logic as the GUI, so results are consistent between both modes. 
