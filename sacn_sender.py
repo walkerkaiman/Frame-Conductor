@@ -25,13 +25,15 @@ except ImportError:
 class SACNSender:
     """Handles sACN communication for sending frame numbers."""
     
-    def __init__(self, universe: int = 1):
+    def __init__(self, universe: int = 1, frame_length: int = 512):
         """
         Initialize the sACN sender and keep it alive for the object's lifetime.
         Args:
             universe (int): sACN universe to send to (default: 1)
+            frame_length (int): DMX frame length (default: 512)
         """
         self.universe = universe
+        self.frame_length = frame_length
         self.sender = None
         self.is_running = False
         self.is_paused = False
@@ -158,11 +160,11 @@ class SACNSender:
                 # Encode frame number into DMX channels 1 and 2
                 msb = (self.current_frame >> 8) & 0xFF  # Most significant byte
                 lsb = self.current_frame & 0xFF         # Least significant byte
-                # Create DMX data (512 channels, all zeros except channels 1 and 2)
-                dmx_data = [0] * 512
+                # Create DMX data (frame_length channels, all zeros except channels 1 and 2)
+                dmx_data = [0] * self.frame_length
                 dmx_data[0] = msb  # Channel 1 (0-indexed)
                 dmx_data[1] = lsb  # Channel 2 (0-indexed)
-                # Send sACN data to Universe 999
+                # Send sACN data to the current universe
                 dmx_tuple = tuple(dmx_data)
                 self.sender[1].dmx_data = dmx_tuple  # type: ignore
                 # Set universe (this might be handled differently in some versions)

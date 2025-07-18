@@ -23,7 +23,9 @@ class ConfigManager:
         self.config_file = config_file
         self.default_config = {
             'target_frame': 1000,
-            'frame_rate': 30
+            'frame_rate': 30,
+            'universe': 999,
+            'frame_length': 512
         }
     
     def load_config(self) -> Dict[str, Any]:

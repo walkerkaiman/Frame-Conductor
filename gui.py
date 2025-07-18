@@ -13,6 +13,36 @@ from config_manager import ConfigManager
 from sacn_sender import SACNSender
 
 
+class ConfigVars:
+    def __init__(self, config_manager, on_change_callback):
+        self.config_manager = config_manager
+        self.on_change_callback = on_change_callback
+        config = self.config_manager.load_config()
+        self.frame_var = tk.StringVar(value=str(config.get('target_frame', 1000)))
+        self.fps_var = tk.StringVar(value=str(config.get('frame_rate', 30)))
+        self.universe_var = tk.StringVar(value=str(config.get('universe', 999)))
+        self.frame_length_var = tk.StringVar(value=str(config.get('frame_length', 512)))
+        # Trace all changes to save config
+        self.frame_var.trace_add('write', self._on_change)
+        self.fps_var.trace_add('write', self._on_change)
+        self.universe_var.trace_add('write', self._on_change)
+        self.frame_length_var.trace_add('write', self._on_change)
+    def _on_change(self, *args):
+        self.on_change_callback()
+    def to_dict(self):
+        return {
+            'target_frame': int(self.frame_var.get()),
+            'frame_rate': int(self.fps_var.get()),
+            'universe': int(self.universe_var.get()),
+            'frame_length': int(self.frame_length_var.get())
+        }
+    def load(self):
+        config = self.config_manager.load_config()
+        self.frame_var.set(str(config.get('target_frame', 1000)))
+        self.fps_var.set(str(config.get('frame_rate', 30)))
+        self.universe_var.set(str(config.get('universe', 999)))
+        self.frame_length_var.set(str(config.get('frame_length', 512)))
+
 class FrameConductorGUI:
     """Main GUI class for the Frame Conductor application."""
     
@@ -33,11 +63,12 @@ class FrameConductorGUI:
         self.sacn_sender = SACNSender()
         
         # GUI variables
-        self.frame_var = tk.StringVar(value="1000")
         self.status_var = tk.StringVar(value="Ready")
         self.current_frame_var = tk.StringVar(value="0")
         self.target_frame_var = tk.StringVar(value="1000")
         self.fps_var = tk.StringVar(value="30")
+        self.universe_var = tk.StringVar(value="999")
+        self.frame_length_var = tk.StringVar(value="512")
         
         # GUI components
         self.start_button: Optional[ttk.Button] = None
@@ -46,24 +77,19 @@ class FrameConductorGUI:
         self.progress_var = tk.DoubleVar()
         
         # Load configuration and setup GUI
+        self.config_vars = ConfigVars(self.config_manager, self.save_config)
         self.load_config()
         self.setup_gui()
         self.setup_callbacks()
         
     def load_config(self):
-        """Load configuration from file."""
-        config = self.config_manager.load_config()
-        self.frame_var.set(str(config.get('target_frame', 1000)))
-        self.fps_var.set(str(config.get('frame_rate', 30)))
-        self.target_frame_var.set(str(config.get('target_frame', 1000)))
+        """Load configuration from file and update GUI variables."""
+        self.config_vars.load()
+        self.target_frame_var.set(self.config_vars.frame_var.get())
         
     def save_config(self):
         """Save current configuration to file."""
-        config = {
-            'target_frame': int(self.frame_var.get()),
-            'frame_rate': int(self.fps_var.get())
-        }
-        self.config_manager.save_config(config)
+        self.config_manager.save_config(self.config_vars.to_dict())
         
     def setup_gui(self):
         """Setup the GUI components."""
@@ -98,8 +124,22 @@ class FrameConductorGUI:
         
         # Target frame number
         ttk.Label(config_frame, text="Target Frame Number:").pack(anchor="w")
-        frame_entry = ttk.Entry(config_frame, textvariable=self.frame_var, width=20)
+        frame_entry = ttk.Entry(config_frame, textvariable=self.config_vars.frame_var, width=20)
         frame_entry.pack(fill="x", pady=(5, 10))
+        
+        # Universe
+        ttk.Label(config_frame, text="Universe:").pack(anchor="w")
+        universe_entry = ttk.Entry(config_frame, textvariable=self.config_vars.universe_var, width=20)
+        universe_entry.pack(fill="x", pady=(5, 10))
+        universe_entry.bind("<FocusOut>", self._on_universe_change)
+        universe_entry.bind("<Return>", self._on_universe_change)
+        
+        # Frame Length
+        ttk.Label(config_frame, text="Frame Length:").pack(anchor="w")
+        frame_length_entry = ttk.Entry(config_frame, textvariable=self.config_vars.frame_length_var, width=20)
+        frame_length_entry.pack(fill="x", pady=(5, 10))
+        frame_length_entry.bind("<FocusOut>", self._on_frame_length_change)
+        frame_length_entry.bind("<Return>", self._on_frame_length_change)
         
         # Frame rate
         ttk.Label(config_frame, text="Frame Rate (fps):").pack(anchor="w")
@@ -107,7 +147,7 @@ class FrameConductorGUI:
         fps_frame.pack(fill="x", pady=(5, 10))
         
         # FPS entry field
-        fps_entry = ttk.Entry(fps_frame, textvariable=self.fps_var, width=10)
+        fps_entry = ttk.Entry(fps_frame, textvariable=self.config_vars.fps_var, width=10)
         fps_entry.pack(side="left", padx=(0, 10))
         fps_entry.bind("<FocusOut>", self._on_fps_change)
         fps_entry.bind("<Return>", self._on_fps_change)
@@ -203,33 +243,71 @@ You can also manually save settings using the "Save Config" button.
         
     def _set_fps_preset(self, fps: int):
         """Set FPS to a preset value."""
-        self.fps_var.set(str(fps))
+        self.config_vars.fps_var.set(str(fps))
         
     def _on_fps_change(self, event=None):
         """Handle FPS value change from entry field."""
         try:
-            fps = int(self.fps_var.get())
+            fps = int(self.config_vars.fps_var.get())
             if fps <= 0 or fps > 120:
-                self.fps_var.set("30")  # Revert to default
+                self.config_vars.fps_var.set("30")  # Revert to default
         except ValueError:
-            self.fps_var.set("30")  # Revert to default
+            self.config_vars.fps_var.set("30")  # Revert to default
+            
+    def _on_universe_change(self, event=None):
+        """Handle universe value change from entry field."""
+        try:
+            universe = int(self.config_vars.universe_var.get())
+            if universe < 1 or universe > 63999:
+                self.config_vars.universe_var.set("999")  # Revert to default
+        except ValueError:
+            self.config_vars.universe_var.set("999")  # Revert to default
+        self.save_config()
+            
+    def _on_frame_length_change(self, event=None):
+        """Handle frame length value change from entry field."""
+        try:
+            frame_length = int(self.config_vars.frame_length_var.get())
+            if frame_length < 24 or frame_length > 512:
+                self.config_vars.frame_length_var.set("512")  # Revert to default
+        except ValueError:
+            self.config_vars.frame_length_var.set("512")  # Revert to default
+        self.save_config()
             
     def _start_sending(self):
         """Start sending sACN frames."""
         try:
-            target_frame = int(self.frame_var.get())
+            target_frame = int(self.config_vars.frame_var.get())
             if target_frame < 0 or target_frame > 65535:
                 messagebox.showerror("Invalid Frame", "Frame number must be between 0 and 65535")
                 return
                 
             # Get FPS from GUI
             try:
-                fps = int(self.fps_var.get())
+                fps = int(self.config_vars.fps_var.get())
                 if fps <= 0 or fps > 120:
                     messagebox.showerror("Invalid FPS", "FPS must be between 1 and 120")
                     return
             except ValueError:
                 messagebox.showerror("Invalid FPS", "Please enter a valid FPS number")
+                return
+                
+            try:
+                universe = int(self.config_vars.universe_var.get())
+                if universe < 1 or universe > 63999:
+                    messagebox.showerror("Invalid Universe", "Universe must be between 1 and 63999")
+                    return
+            except ValueError:
+                messagebox.showerror("Invalid Universe", "Please enter a valid universe number")
+                return
+                
+            try:
+                frame_length = int(self.config_vars.frame_length_var.get())
+                if frame_length < 24 or frame_length > 512:
+                    messagebox.showerror("Invalid Frame Length", "Frame length must be between 24 and 512")
+                    return
+            except ValueError:
+                messagebox.showerror("Invalid Frame Length", "Please enter a valid frame length")
                 return
                 
             self.target_frame_var.set(str(target_frame))
@@ -244,6 +322,8 @@ You can also manually save settings using the "Save Config" button.
                 return
                 
             # Start sending
+            self.sacn_sender.universe = universe
+            self.sacn_sender.frame_length = frame_length
             if self.sacn_sender.start_sending(target_frame, fps):
                 self.current_frame_var.set("0")
                 self.progress_var.set(0)

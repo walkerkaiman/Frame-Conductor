@@ -16,6 +16,7 @@ import time
 import tkinter as tk
 from gui import FrameConductorGUI
 from sacn_sender import SACNSender
+from utils.headless_utils import print_headless_instructions, headless_progress_bar
 
 
 def run_gui():
@@ -24,24 +25,6 @@ def run_gui():
     app = FrameConductorGUI(root)
     root.protocol("WM_DELETE_WINDOW", app.on_closing)
     root.mainloop()
-
-
-def print_headless_instructions():
-    print("\nFrame Conductor (Headless Mode)")
-    print("================================")
-    print("Keyboard commands:")
-    print("  p : Play/Pause")
-    print("  r : Reset")
-    print("  q : Quit")
-    print("--------------------------------")
-
-
-def headless_progress_bar(current, total, status, bar_length=30):
-    percent = (current / total) if total else 0
-    filled = int(bar_length * percent)
-    bar = "=" * filled + ">" + " " * (bar_length - filled - 1)
-    percent_disp = int(percent * 100)
-    print(f"\r[{bar}] {percent_disp:3d}%  (Frame {current}/{total})  Status: {status}   ", end="", flush=True)
 
 
 def run_headless(target_frame, fps):
