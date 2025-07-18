@@ -35,7 +35,7 @@ def start_frontend():
     # Use full path to npm.cmd for Windows compatibility
     npm_path = r"C:\Program Files\nodejs\npm.cmd"
     if not os.path.exists(npm_path):
-        npm_path = "npm"  # Fallback to system PATH
+        npm_path = "npm"  # Fallback to system PAT H
     return subprocess.Popen([npm_path, "run", "dev"], cwd="frontend")
 
 
