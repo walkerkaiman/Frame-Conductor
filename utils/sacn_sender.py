@@ -186,8 +186,11 @@ class SACNSender:
     def is_sacn_available(self) -> bool:
         """
         Check if sACN library is available.
-        
         Returns:
             bool: True if sACN library is available, False otherwise
         """
-        return SACN_AVAILABLE 
+        try:
+            import sacn
+            return True
+        except ImportError:
+            return False 

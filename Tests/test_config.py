@@ -1,7 +1,7 @@
 import os
 import json
 import pytest
-from config_manager import ConfigManager
+from utils.config_manager import ConfigManager
 
 CONFIG_FILE = 'test_config.json'
 

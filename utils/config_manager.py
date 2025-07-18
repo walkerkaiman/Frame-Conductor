@@ -22,7 +22,7 @@ class ConfigManager:
         """
         self.config_file = config_file
         self.default_config = {
-            'target_frame': 1000,
+            'total_frames': 1000,
             'frame_rate': 30,
             'universe': 999,
             'frame_length': 512
@@ -81,11 +81,11 @@ class ConfigManager:
             bool: True if configuration is valid, False otherwise
         """
         try:
-            target_frame = config.get('target_frame', 0)
+            total_frames = config.get('total_frames', 0)
             frame_rate = config.get('frame_rate', 0)
             
-            # Validate target frame
-            if not isinstance(target_frame, int) or target_frame < 0 or target_frame > 65535:
+            # Validate total frames
+            if not isinstance(total_frames, int) or total_frames < 0 or total_frames > 65535:
                 return False
                 
             # Validate frame rate
