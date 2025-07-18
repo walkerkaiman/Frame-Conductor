@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from sacn_sender import SACNSender
+from utils.sacn_sender import SACNSender
 
 def test_initializes_with_defaults():
     sender = SACNSender()

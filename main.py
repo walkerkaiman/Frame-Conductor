@@ -9,171 +9,70 @@ Usage:
     python main.py [--headless] [--target-frame N] [--fps X]
 """
 
-import argparse
+import subprocess
 import sys
-import threading
 import time
-import tkinter as tk
-from gui import FrameConductorGUI
-from utils.sacn_sender import SACNSender
-from utils.headless_utils import print_headless_instructions, headless_progress_bar
+import argparse
+import webbrowser
+import os
+# from gui import FrameConductorGUI  # Removed old GUI
+# from utils.sacn_sender import SACNSender  # Only needed for headless mode
+# from utils.headless_utils import print_headless_instructions, headless_progress_bar  # Only needed for headless mode
+
+BACKEND_PORT = 9000
+FRONTEND_PORT = 5173  # Default Vite dev server port
+FRONTEND_DEV = True  # Set to True to launch React dev server automatically
 
 
-def run_gui():
-    """Main function to run the Frame Conductor GUI application."""
-    try:
-        root = tk.Tk()
-        app = FrameConductorGUI(root)
-        root.protocol("WM_DELETE_WINDOW", app.on_closing)
-        root.mainloop()
-    except KeyboardInterrupt:
-        print("\nKeyboard interrupt received. Exiting GUI mode.")
-        try:
-            root.destroy()
-        except Exception:
-            pass
+def start_backend():
+    # Start FastAPI server with uvicorn
+    return subprocess.Popen([
+        sys.executable, "-m", "uvicorn", "api_server:app",
+        "--host", "0.0.0.0", "--port", str(BACKEND_PORT)
+    ])
 
-
-def run_headless(target_frame, fps):
-    sender = SACNSender(universe=999)
-    status = "Paused"
-    running = False
-    paused = True
-    reset_requested = False
-    quit_requested = False
-    current_frame = 0
-    lock = threading.Lock()
-    last_paused_state = True
-
-    def on_frame_sent(frame):
-        nonlocal current_frame
-        with lock:
-            current_frame = frame
-
-    sender.set_frame_callback(on_frame_sent)
-
-    def sender_thread_func():
-        nonlocal running, paused, reset_requested, status, last_paused_state
-        while not quit_requested:
-            if running and not paused:
-                if sender.is_running:
-                    # Already running, just wait
-                    time.sleep(0.05)
-                else:
-                    # Start sending
-                    sender.start_sending(target_frame, fps)
-                    status = "Running"
-            elif reset_requested:
-                sender.stop_sending()
-                status = "Reset"
-                with lock:
-                    nonlocal current_frame
-                    current_frame = 0
-                reset_requested = False
-                paused = True
-                running = False
-            else:
-                if sender.is_running and not last_paused_state:
-                    sender.pause()
-                    status = "Paused"
-                    last_paused_state = True
-                time.sleep(0.05)
-        sender.stop_sending()
-        status = "Stopped"
-
-    thread = threading.Thread(target=sender_thread_func, daemon=True)
-    thread.start()
-
-    print_headless_instructions()
-    print("Starting in Paused state. Press 'p' to Play.")
-
-    try:
-        while not quit_requested:
-            with lock:
-                frame = current_frame
-            headless_progress_bar(frame, target_frame, status)
-            if sys.platform == "win32":
-                import msvcrt
-                if msvcrt.kbhit():
-                    key = msvcrt.getwch().lower()
-                    if key == "p":
-                        if not running:
-                            running = True
-                            paused = False
-                            status = "Running"
-                            if last_paused_state:
-                                sender.resume()
-                                last_paused_state = False
-                        else:
-                            paused = not paused
-                            status = "Paused" if paused else "Running"
-                            if paused:
-                                sender.pause()
-                            else:
-                                sender.resume()
-                            last_paused_state = paused
-                    elif key == "r":
-                        reset_requested = True
-                        status = "Reset"
-                    elif key == "q":
-                        quit_requested = True
-                        print("\nExiting.")
-                        break
-            else:
-                # Unix: use select for non-blocking input
-                import select
-                import termios
-                import tty
-                dr, dw, de = select.select([sys.stdin], [], [], 0)
-                if dr:
-                    key = sys.stdin.read(1).lower()
-                    if key == "p":
-                        if not running:
-                            running = True
-                            paused = False
-                            status = "Running"
-                            if last_paused_state:
-                                sender.resume()
-                                last_paused_state = False
-                        else:
-                            paused = not paused
-                            status = "Paused" if paused else "Running"
-                            if paused:
-                                sender.pause()
-                            else:
-                                sender.resume()
-                            last_paused_state = paused
-                    elif key == "r":
-                        reset_requested = True
-                        status = "Reset"
-                    elif key == "q":
-                        quit_requested = True
-                        print("\nExiting.")
-                        break
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        print("\nInterrupted. Exiting.")
-        quit_requested = True
-    finally:
-        sender.stop_sending()
-        print("\nStopped.")
+def start_frontend():
+    # Use full path to npm.cmd for Windows compatibility
+    npm_path = r"C:\Program Files\nodejs\npm.cmd"
+    if not os.path.exists(npm_path):
+        npm_path = "npm"  # Fallback to system PATH
+    return subprocess.Popen([npm_path, "run", "dev"], cwd="frontend")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Frame Conductor - sACN Frame Sender")
     parser.add_argument("--headless", action="store_true", help="Run in headless (no-GUI) mode")
-    parser.add_argument("--target-frame", type=int, default=1000, help="Target frame number (default: 1000)")
+    parser.add_argument("--target-frame", type=int, default=1000, help="Total frames (default: 1000)")
     parser.add_argument("--fps", type=int, default=30, help="Frame rate (default: 30)")
     args = parser.parse_args()
 
+    backend_proc = start_backend()
+    frontend_proc = None
+    if FRONTEND_DEV:
+        frontend_proc = start_frontend()
+    time.sleep(2)  # Give servers time to start
+
+    # Open the web GUI in the default browser
+    webbrowser.open(f"http://localhost:{FRONTEND_PORT}")
+
     try:
         if args.headless:
-            run_headless(args.target_frame, args.fps)
+            print("Headless mode not implemented in this scaffold.")
         else:
-            run_gui()
+            print(f"Web GUI launched at http://localhost:{FRONTEND_PORT}")
+        # Wait for interrupt
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\nKeyboard interrupt received. Exiting.")
-        sys.exit(0)
+    finally:
+        backend_proc.terminate()
+        if frontend_proc:
+            frontend_proc.terminate()
+        backend_proc.wait()
+        if frontend_proc:
+            frontend_proc.wait()
+        print("All processes terminated. Goodbye!")
 
 if __name__ == "__main__":
     main() 

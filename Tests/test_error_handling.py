@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from config_manager import ConfigManager
-from sacn_sender import SACNSender
+from utils.config_manager import ConfigManager
+from utils.sacn_sender import SACNSender
 
 def test_invalid_frame_value():
     cm = ConfigManager('test_config.json')
