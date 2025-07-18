@@ -8,8 +8,9 @@ Handles all user interface components and user interactions.
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Dict, Any, Callable, Optional
+import signal
 
-from config_manager import ConfigManager
+from utils.config_manager import ConfigManager
 from sacn_sender import SACNSender
 
 
@@ -18,7 +19,7 @@ class ConfigVars:
         self.config_manager = config_manager
         self.on_change_callback = on_change_callback
         config = self.config_manager.load_config()
-        self.frame_var = tk.StringVar(value=str(config.get('target_frame', 1000)))
+        self.frame_var = tk.StringVar(value=str(config.get('total_frames', 1000)))
         self.fps_var = tk.StringVar(value=str(config.get('frame_rate', 30)))
         self.universe_var = tk.StringVar(value=str(config.get('universe', 999)))
         self.frame_length_var = tk.StringVar(value=str(config.get('frame_length', 512)))
@@ -31,14 +32,14 @@ class ConfigVars:
         self.on_change_callback()
     def to_dict(self):
         return {
-            'target_frame': int(self.frame_var.get()),
+            'total_frames': int(self.frame_var.get()),
             'frame_rate': int(self.fps_var.get()),
             'universe': int(self.universe_var.get()),
             'frame_length': int(self.frame_length_var.get())
         }
     def load(self):
         config = self.config_manager.load_config()
-        self.frame_var.set(str(config.get('target_frame', 1000)))
+        self.frame_var.set(str(config.get('total_frames', 1000)))
         self.fps_var.set(str(config.get('frame_rate', 30)))
         self.universe_var.set(str(config.get('universe', 999)))
         self.frame_length_var.set(str(config.get('frame_length', 512)))
@@ -55,8 +56,8 @@ class FrameConductorGUI:
         """
         self.root = root
         self.root.title("Frame Conductor")
-        self.root.geometry("600x600")
-        self.root.resizable(True, True)
+        self.root.geometry("400x700")
+        self.root.resizable(False, False)
         
         # Initialize components
         self.config_manager = ConfigManager()
@@ -75,17 +76,36 @@ class FrameConductorGUI:
         self.pause_button: Optional[ttk.Button] = None
         self.reset_button: Optional[ttk.Button] = None
         self.progress_var = tk.DoubleVar()
+        self._shutdown_flag = False
+        try:
+            signal.signal(signal.SIGINT, self._on_keyboard_interrupt)
+        except Exception:
+            pass  # Signal may not be available on all platforms
         
         # Load configuration and setup GUI
         self.config_vars = ConfigVars(self.config_manager, self.save_config)
-        self.load_config()
         self.setup_gui()
+        self.load_config()
         self.setup_callbacks()
+        self._periodic_check()
+        
+    def _on_keyboard_interrupt(self, signum, frame):
+        self._shutdown_flag = True
+
+    def _periodic_check(self):
+        if self._shutdown_flag:
+            self.on_closing()
+        else:
+            self.root.after(100, self._periodic_check)
         
     def load_config(self):
         """Load configuration from file and update GUI variables."""
         self.config_vars.load()
         self.target_frame_var.set(self.config_vars.frame_var.get())
+        total_frames = int(self.target_frame_var.get()) if self.target_frame_var.get().isdigit() else 100
+        self.progress_bar.config(maximum=total_frames)
+        self.progress_var.set(0)
+        self.progress_label.config(text=f"0 / {total_frames} (0%)")
         
     def save_config(self):
         """Save current configuration to file."""
@@ -114,32 +134,15 @@ class FrameConductorGUI:
         # Progress frame
         self._setup_progress_frame(main_frame)
         
-        # Info frame
-        self._setup_info_frame(main_frame)
-        
     def _setup_config_frame(self, parent):
         """Setup the configuration frame."""
         config_frame = ttk.LabelFrame(parent, text="Configuration", padding="10")
         config_frame.pack(fill="x", pady=(0, 20))
         
         # Target frame number
-        ttk.Label(config_frame, text="Target Frame Number:").pack(anchor="w")
+        ttk.Label(config_frame, text="Total Frames:").pack(anchor="w")
         frame_entry = ttk.Entry(config_frame, textvariable=self.config_vars.frame_var, width=20)
         frame_entry.pack(fill="x", pady=(5, 10))
-        
-        # Universe
-        ttk.Label(config_frame, text="Universe:").pack(anchor="w")
-        universe_entry = ttk.Entry(config_frame, textvariable=self.config_vars.universe_var, width=20)
-        universe_entry.pack(fill="x", pady=(5, 10))
-        universe_entry.bind("<FocusOut>", self._on_universe_change)
-        universe_entry.bind("<Return>", self._on_universe_change)
-        
-        # Frame Length
-        ttk.Label(config_frame, text="Frame Length:").pack(anchor="w")
-        frame_length_entry = ttk.Entry(config_frame, textvariable=self.config_vars.frame_length_var, width=20)
-        frame_length_entry.pack(fill="x", pady=(5, 10))
-        frame_length_entry.bind("<FocusOut>", self._on_frame_length_change)
-        frame_length_entry.bind("<Return>", self._on_frame_length_change)
         
         # Frame rate
         ttk.Label(config_frame, text="Frame Rate (fps):").pack(anchor="w")
@@ -216,26 +219,12 @@ class FrameConductorGUI:
         progress_frame.pack(fill="x")
         
         # Progress bar
-        self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var, 
-                                           maximum=100)
+        total_frames = int(self.target_frame_var.get()) if self.target_frame_var.get().isdigit() else 100
+        self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var, maximum=total_frames)
         self.progress_bar.pack(fill="x", pady=(5, 0))
-        
-    def _setup_info_frame(self, parent):
-        """Setup the info frame."""
-        info_frame = ttk.LabelFrame(parent, text="Information", padding="10")
-        info_frame.pack(fill="x", pady=(20, 0))
-        
-        info_text = """
-This tool sends sACN frame numbers to Universe 999.
-Frame numbers are encoded in DMX channels 1 (MSB) and 2 (LSB).
-The sACN frames input trigger module should receive these frames
-and display the frame numbers in the Interaction app.
-
-Configuration is automatically saved when you start sending frames.
-You can also manually save settings using the "Save Config" button.
-        """
-        info_label = ttk.Label(info_frame, text=info_text, justify="left")
-        info_label.pack(anchor="w")
+        # Progress label
+        self.progress_label = ttk.Label(progress_frame, text=f"0 / {total_frames} (0%)")
+        self.progress_label.pack(anchor="center", pady=(5, 0))
         
     def setup_callbacks(self):
         """Setup callback functions."""
@@ -277,9 +266,9 @@ You can also manually save settings using the "Save Config" button.
     def _start_sending(self):
         """Start sending sACN frames."""
         try:
-            target_frame = int(self.config_vars.frame_var.get())
-            if target_frame < 0 or target_frame > 65535:
-                messagebox.showerror("Invalid Frame", "Frame number must be between 0 and 65535")
+            total_frames = int(self.config_vars.frame_var.get())
+            if total_frames < 0 or total_frames > 65535:
+                messagebox.showerror("Invalid Total Frames", "Total frames must be between 0 and 65535")
                 return
                 
             # Get FPS from GUI
@@ -310,7 +299,10 @@ You can also manually save settings using the "Save Config" button.
                 messagebox.showerror("Invalid Frame Length", "Please enter a valid frame length")
                 return
                 
-            self.target_frame_var.set(str(target_frame))
+            self.target_frame_var.set(str(total_frames))
+            self.progress_bar.config(maximum=total_frames)
+            self.progress_var.set(0)
+            self.progress_label.config(text=f"0 / {total_frames} (0%)")
             
             # Save configuration
             self.save_config()
@@ -324,7 +316,7 @@ You can also manually save settings using the "Save Config" button.
             # Start sending
             self.sacn_sender.universe = universe
             self.sacn_sender.frame_length = frame_length
-            if self.sacn_sender.start_sending(target_frame, fps):
+            if self.sacn_sender.start_sending(total_frames, fps):
                 self.current_frame_var.set("0")
                 self.progress_var.set(0)
                 
@@ -370,14 +362,14 @@ You can also manually save settings using the "Save Config" button.
     def _update_gui(self, frame: int):
         """Update GUI elements (called from main thread)."""
         self.current_frame_var.set(str(frame))
-        
-        target_frame = int(self.target_frame_var.get())
-        if target_frame > 0:
-            progress = (frame / target_frame) * 100
-            self.progress_var.set(min(progress, 100))
-            
+        total_frames = self.sacn_sender.target_frame if hasattr(self.sacn_sender, 'target_frame') else int(self.target_frame_var.get())
+        if total_frames > 0:
+            self.progress_bar.config(maximum=total_frames)
+            self.progress_var.set(frame)
+            percent = int((frame / total_frames) * 100)
+            self.progress_label.config(text=f"{frame} / {total_frames} ({percent}%)")
         # Check if sending is complete
-        if frame >= target_frame:
+        if frame >= total_frames:
             self._sending_complete()
             
     def _sending_complete(self):

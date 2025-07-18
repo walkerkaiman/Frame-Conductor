@@ -1,4 +1,6 @@
 {
-  "target_frame": 10000,
-  "frame_rate": 30
+  "total_frames": 1000,
+  "frame_rate": 15,
+  "universe": 999,
+  "frame_length": 512
 }

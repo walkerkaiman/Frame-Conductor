@@ -15,20 +15,27 @@ import threading
 import time
 import tkinter as tk
 from gui import FrameConductorGUI
-from sacn_sender import SACNSender
+from utils.sacn_sender import SACNSender
 from utils.headless_utils import print_headless_instructions, headless_progress_bar
 
 
 def run_gui():
     """Main function to run the Frame Conductor GUI application."""
-    root = tk.Tk()
-    app = FrameConductorGUI(root)
-    root.protocol("WM_DELETE_WINDOW", app.on_closing)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = FrameConductorGUI(root)
+        root.protocol("WM_DELETE_WINDOW", app.on_closing)
+        root.mainloop()
+    except KeyboardInterrupt:
+        print("\nKeyboard interrupt received. Exiting GUI mode.")
+        try:
+            root.destroy()
+        except Exception:
+            pass
 
 
 def run_headless(target_frame, fps):
-    sender = SACNSender(universe=1)
+    sender = SACNSender(universe=999)
     status = "Paused"
     running = False
     paused = True
@@ -159,10 +166,14 @@ def main():
     parser.add_argument("--fps", type=int, default=30, help="Frame rate (default: 30)")
     args = parser.parse_args()
 
-    if args.headless:
-        run_headless(args.target_frame, args.fps)
-    else:
-        run_gui()
+    try:
+        if args.headless:
+            run_headless(args.target_frame, args.fps)
+        else:
+            run_gui()
+    except KeyboardInterrupt:
+        print("\nKeyboard interrupt received. Exiting.")
+        sys.exit(0)
 
 if __name__ == "__main__":
     main() 
