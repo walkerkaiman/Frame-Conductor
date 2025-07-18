@@ -1,4 +1,7 @@
 sacn>=1.4.0
-# argparse is included in Python 3.2+, listed for clarity
-# tkinter is included with most Python installations, but on some systems you may need to install it separately
-# On Windows, tkinter is included by default 
+# argpar
+pytest
+pytest-asyncio
+httpx
+fastapi
+uvicorn 
