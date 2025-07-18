@@ -2,6 +2,17 @@
 
 A standalone application for sending sACN frame numbers to Universe 999. This application can be run independently of the Interaction framework.
 
+---
+
+## Port Numbers
+
+- **Backend API (FastAPI):** http://localhost:9000
+- **Frontend (React/Vite):** http://localhost:5173
+
+When you run `python main.py`, the backend API will start on port 9000 and the React frontend will start on port 5173. The main script will also open the frontend in your default web browser automatically.
+
+---
+
 ## Features
 
 - **Configurable Frame Numbers**: Send frame numbers from 0 to 65535
@@ -21,6 +32,8 @@ A standalone application for sending sACN frame numbers to Universe 999. This ap
    ```bash
    python main.py
    ```
+   - The backend API will be available at http://localhost:9000
+   - The web GUI will be available at http://localhost:5173 (opened automatically)
 
 ## Project Structure
 

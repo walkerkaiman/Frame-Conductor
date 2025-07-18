@@ -86,40 +86,43 @@ function App() {
   };
 
   return (
-    <div className="App">
-      <h1>Frame Conductor</h1>
-      <div className="config-section">
-        <h2>Configuration</h2>
-        <label>
-          Total Frames:
-          <input type="number" min={1} max={65535} value={totalFrames} onChange={e => setTotalFrames(Number(e.target.value))} />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col items-center py-8">
+      <h1 className="text-4xl font-bold text-indigo-700 mb-6 drop-shadow">Frame Conductor</h1>
+      <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md mb-8">
+        <h2 className="text-xl font-semibold text-indigo-600 mb-4">Configuration</h2>
+        <label className="block mb-4">
+          <span className="block text-sm font-medium text-gray-700 mb-1">Total Frames:</span>
+          <input type="number" min={1} max={65535} value={totalFrames} onChange={e => setTotalFrames(Number(e.target.value))} className="w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
         </label>
-        <label>
-          Frame Rate (fps):
-          <input type="number" min={1} max={120} value={frameRate} onChange={e => setFrameRate(Number(e.target.value))} />
+        <label className="block mb-4">
+          <span className="block text-sm font-medium text-gray-700 mb-1">Frame Rate (fps):</span>
+          <input type="number" min={1} max={120} value={frameRate} onChange={e => setFrameRate(Number(e.target.value))} className="w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
         </label>
-        <button onClick={handleSave}>💾 Save Config</button>
+        <button onClick={handleSave} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded transition mb-2">💾 Save Config</button>
       </div>
-      <div className="status-section">
-        <h2>Status</h2>
-        <div>Status: <b>{status}</b></div>
-        <div>Current Frame: <b>{currentFrame}</b></div>
+      <div className="bg-white rounded-xl shadow p-6 w-full max-w-md mb-8">
+        <h2 className="text-lg font-semibold text-indigo-600 mb-2">Status</h2>
+        <div className="mb-1">Status: <b className="text-indigo-700">{status}</b></div>
+        <div className="mb-1">Current Frame: <b>{currentFrame}</b></div>
         <div>Total Frames: <b>{totalFrames}</b></div>
       </div>
-      <div className="controls-section">
-        <h2>Controls</h2>
-        <button
-          onClick={handlePauseResume}
-          disabled={status === 'Disconnected'}
-        >
-          {(status === 'Ready' || status === 'Complete') ? '▶ Start' : (isPaused ? '▶ Resume' : '⏸ Pause')}
-        </button>
-        <button onClick={handleReset}>🔄 Reset</button>
+      <div className="bg-white rounded-xl shadow p-6 w-full max-w-md mb-8 flex flex-col items-center">
+        <h2 className="text-lg font-semibold text-indigo-600 mb-2">Controls</h2>
+        <div className="flex gap-4 mb-2">
+          <button
+            onClick={handlePauseResume}
+            disabled={status === 'Disconnected'}
+            className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-6 rounded disabled:opacity-50 transition"
+          >
+            {(status === 'Ready' || status === 'Complete') ? '▶ Start' : (isPaused ? '▶ Resume' : '⏸ Pause')}
+          </button>
+          <button onClick={handleReset} className="bg-yellow-400 hover:bg-yellow-500 text-white font-semibold py-2 px-6 rounded transition">🔄 Reset</button>
+        </div>
       </div>
-      <div className="progress-section">
-        <h2>Progress</h2>
-        <progress value={currentFrame} max={totalFrames} style={{ width: '100%' }} />
-        <div>{currentFrame} / {totalFrames} ({percent}%)</div>
+      <div className="bg-white rounded-xl shadow p-6 w-full max-w-md flex flex-col items-center">
+        <h2 className="text-lg font-semibold text-indigo-600 mb-2">Progress</h2>
+        <progress value={currentFrame} max={totalFrames} className="w-full h-4 mb-2" />
+        <div className="text-gray-700">{currentFrame} / {totalFrames} ({percent}%)</div>
       </div>
     </div>
   );
