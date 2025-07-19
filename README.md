@@ -8,6 +8,7 @@ A modern web application for sending sACN frame numbers to Universe 999. Built w
 
 - **Modern Web Interface**: React-based GUI accessible from any web browser
 - **Network Accessibility**: Accessible from any device on your local network
+- **Network Singleton Protection**: Only one instance can run per network
 - **Real-time Synchronization**: Multiple browsers stay in sync automatically
 - **Configurable Frame Numbers**: Send frame numbers from 0 to 65535
 - **Adjustable Frame Rate**: Set custom FPS (1-120)
@@ -127,16 +128,56 @@ The application sends to **Universe 999** by default.
 
 ## Usage
 
-1. **Access the Interface**: Open the web interface in any browser
-2. **Configure Settings**:
+1. **Start the Application**:
+   ```bash
+   python main.py
+   ```
+   
+   **Note**: Only one instance of Frame Conductor can run on your network at a time. If another instance is detected, the application will exit with an error.
+
+2. **Access the Interface**: Open the web interface in any browser
+3. **Configure Settings**:
    - Set Total Frames (1-65535)
    - Set Frame Rate (1-120 fps)
    - Click "💾 Save Config" to save settings
-3. **Control Transmission**:
+4. **Control Transmission**:
    - Click "▶ Start" to begin sending frames
    - Use "⏸ Pause" to pause/resume
    - Use "🔄 Reset" to reset to frame 0
-4. **Monitor Progress**: Watch real-time progress bar and frame counter
+5. **Monitor Progress**: Watch real-time progress bar and frame counter
+
+### Advanced Options
+
+**Disable Network Singleton Protection** (for development/testing):
+```bash
+python main.py --no-singleton
+```
+
+**Other Command Line Options**:
+```bash
+python main.py --target-frame 2000 --fps 60
+```
+
+## Network Singleton Protection
+
+Frame Conductor includes a network-wide singleton mechanism to prevent multiple instances from running simultaneously:
+
+### How It Works
+- **UDP Broadcasting**: Uses UDP broadcasts on port 9001 to detect other instances
+- **Instance Detection**: Checks for existing instances before starting
+- **Heartbeat Messages**: Sends periodic heartbeats to announce presence
+- **Automatic Exit**: Exits gracefully if another instance is detected
+
+### Benefits
+- **Prevents Conflicts**: Avoids multiple sACN transmissions on the same network
+- **Resource Management**: Ensures only one instance uses network resources
+- **Clear Error Messages**: Provides clear feedback when another instance is running
+
+### Disabling Protection
+For development or testing, you can disable the singleton protection:
+```bash
+python main.py --no-singleton
+```
 
 ## Multi-browser Features
 

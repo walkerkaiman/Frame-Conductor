@@ -11,6 +11,7 @@ Features:
 - Network accessibility for multi-device control
 - Real-time progress updates via WebSocket
 - Configuration persistence and multi-browser synchronization
+- Network-wide singleton protection (only one instance per network)
 
 Usage:
     python main.py [--headless] [--target-frame N] [--fps X]
@@ -24,6 +25,10 @@ Network Access:
     The application automatically detects your local IP address and provides
     URLs for both local and network access. Other devices on your network
     can access the interface using the displayed network URL.
+
+Network Singleton:
+    Only one instance of Frame Conductor can run on the network at a time.
+    If another instance is detected, the application will exit with an error.
 """
 
 import subprocess
@@ -34,11 +39,183 @@ import webbrowser
 import os
 import socket
 import shutil
+import threading
+import json
+from typing import Optional
 
 # Configuration constants
 BACKEND_PORT = 9000
 FRONTEND_PORT = 5173  # Default Vite dev server port
 FRONTEND_DEV = True  # Set to True to launch React dev server automatically
+SINGLETON_PORT = 9001  # Port for singleton detection
+SINGLETON_TIMEOUT = 5  # Seconds to wait for singleton check
+
+
+class NetworkSingleton:
+    """
+    Network-wide singleton mechanism to ensure only one instance runs per network.
+    
+    Uses UDP broadcasting to detect if another instance is already running.
+    Sends periodic heartbeat messages and listens for other instances.
+    """
+    
+    def __init__(self, port: int = SINGLETON_PORT):
+        self.port = port
+        self.socket: Optional[socket.socket] = None
+        self.is_running = False
+        self.heartbeat_thread: Optional[threading.Thread] = None
+        self.listener_thread: Optional[threading.Thread] = None
+        self.local_ip = get_local_ip()
+        self.instance_id = f"{self.local_ip}:{BACKEND_PORT}:{FRONTEND_PORT}"
+        
+    def start(self) -> bool:
+        """
+        Start the singleton mechanism.
+        
+        Returns:
+            bool: True if no other instance is running, False otherwise
+        """
+        try:
+            # Create UDP socket
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            self.socket.bind(('', self.port))
+            self.socket.settimeout(1.0)
+            
+            # Check for existing instances
+            if self._check_for_existing_instances():
+                print(f"[ERROR] Another Frame Conductor instance is already running on the network")
+                print(f"[ERROR] Only one instance is allowed per network")
+                return False
+            
+            # Start heartbeat and listener threads
+            self.is_running = True
+            self.heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+            self.listener_thread = threading.Thread(target=self._listener_loop, daemon=True)
+            self.heartbeat_thread.start()
+            self.listener_thread.start()
+            
+            print(f"[INFO] Network singleton started - this instance: {self.instance_id}")
+            return True
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to start network singleton: {e}")
+            return False
+    
+    def stop(self) -> None:
+        """Stop the singleton mechanism and clean up resources."""
+        self.is_running = False
+        if self.socket:
+            try:
+                self.socket.close()
+            except:
+                pass
+            self.socket = None
+    
+    def _check_for_existing_instances(self) -> bool:
+        """
+        Check if another instance is already running on the network.
+        
+        Returns:
+            bool: True if another instance is detected, False otherwise
+        """
+        print(f"[INFO] Checking for existing Frame Conductor instances...")
+        
+        # Send broadcast message to check for existing instances
+        check_message = {
+            "type": "instance_check",
+            "instance_id": self.instance_id,
+            "timestamp": time.time()
+        }
+        
+        try:
+            if not self.socket:
+                return False
+                
+            # Broadcast the check message
+            self.socket.sendto(json.dumps(check_message).encode(), ('<broadcast>', self.port))
+            
+            # Listen for responses
+            start_time = time.time()
+            while time.time() - start_time < SINGLETON_TIMEOUT:
+                try:
+                    if not self.socket:
+                        break
+                    data, addr = self.socket.recvfrom(1024)
+                    if addr[0] != self.local_ip:  # Ignore our own messages
+                        response = json.loads(data.decode())
+                        if response.get("type") == "instance_response":
+                            other_instance = response.get("instance_id", "unknown")
+                            print(f"[ERROR] Found existing instance: {other_instance} at {addr[0]}")
+                            return True
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    print(f"[WARNING] Error checking for instances: {e}")
+                    continue
+            
+            print(f"[INFO] No existing instances found")
+            return False
+            
+        except Exception as e:
+            print(f"[WARNING] Error during instance check: {e}")
+            return False
+    
+    def _heartbeat_loop(self) -> None:
+        """Send periodic heartbeat messages to announce this instance."""
+        while self.is_running:
+            try:
+                if not self.socket:
+                    break
+                heartbeat_message = {
+                    "type": "heartbeat",
+                    "instance_id": self.instance_id,
+                    "timestamp": time.time()
+                }
+                self.socket.sendto(json.dumps(heartbeat_message).encode(), ('<broadcast>', self.port))
+                time.sleep(2)  # Send heartbeat every 2 seconds
+            except Exception as e:
+                print(f"[WARNING] Error sending heartbeat: {e}")
+                time.sleep(5)  # Wait longer on error
+    
+    def _listener_loop(self) -> None:
+        """Listen for messages from other instances."""
+        while self.is_running:
+            try:
+                if not self.socket:
+                    break
+                data, addr = self.socket.recvfrom(1024)
+                if addr[0] == self.local_ip:  # Ignore our own messages
+                    continue
+                
+                try:
+                    message = json.loads(data.decode())
+                    message_type = message.get("type")
+                    
+                    if message_type == "instance_check":
+                        # Respond to instance check
+                        if self.socket:
+                            response = {
+                                "type": "instance_response",
+                                "instance_id": self.instance_id,
+                                "timestamp": time.time()
+                            }
+                            self.socket.sendto(json.dumps(response).encode(), (addr[0], self.port))
+                        
+                    elif message_type == "heartbeat":
+                        # Log other instance heartbeat
+                        other_instance = message.get("instance_id", "unknown")
+                        print(f"[WARNING] Detected another instance: {other_instance} at {addr[0]}")
+                        
+                except json.JSONDecodeError:
+                    continue
+                    
+            except socket.timeout:
+                continue
+            except Exception as e:
+                print(f"[WARNING] Error in listener loop: {e}")
+                time.sleep(1)
 
 
 def start_backend() -> subprocess.Popen:
@@ -123,13 +300,14 @@ def main() -> int:
     
     This function:
     1. Parses command line arguments
-    2. Starts the backend FastAPI server
-    3. Starts the frontend React development server (if enabled)
-    4. Waits for servers to start and verifies they're running
-    5. Opens the web interface in the default browser
-    6. Displays network access information
-    7. Waits for user interruption (Ctrl+C)
-    8. Gracefully shuts down all processes
+    2. Starts the network singleton mechanism
+    3. Starts the backend FastAPI server
+    4. Starts the frontend React development server (if enabled)
+    5. Waits for servers to start and verifies they're running
+    6. Opens the web interface in the default browser
+    7. Displays network access information
+    8. Waits for user interruption (Ctrl+C)
+    9. Gracefully shuts down all processes
     
     Returns:
         int: Exit code (0 for success, 1 for failure)
@@ -138,66 +316,82 @@ def main() -> int:
     parser.add_argument("--headless", action="store_true", help="Run in headless (no-GUI) mode")
     parser.add_argument("--target-frame", type=int, default=1000, help="Total frames (default: 1000)")
     parser.add_argument("--fps", type=int, default=30, help="Frame rate (default: 30)")
+    parser.add_argument("--no-singleton", action="store_true", help="Disable network singleton protection")
     args = parser.parse_args()
 
-    print(f"[DEBUG] Starting backend on port {BACKEND_PORT}...")
-    backend_proc = start_backend()
-    
-    frontend_proc = None
-    if FRONTEND_DEV:
-        print(f"[DEBUG] Starting frontend on port {FRONTEND_PORT}...")
-        frontend_proc = start_frontend()
-    
-    print("[DEBUG] Waiting for servers to start...")
-    time.sleep(3)  # Give servers more time to start
-    
-    # Check if servers are running
-    local_ip = get_local_ip()
-    backend_running = check_port(local_ip, BACKEND_PORT)
-    frontend_running = check_port(local_ip, FRONTEND_PORT)
-    
-    print(f"[DEBUG] Backend running: {backend_running}")
-    print(f"[DEBUG] Frontend running: {frontend_running}")
-    
-    if not backend_running:
-        print(f"[ERROR] Backend failed to start on port {BACKEND_PORT}")
-        return 1
-    
-    if not frontend_running:
-        print(f"[WARNING] Frontend may not be running on port {FRONTEND_PORT}")
-        print("[INFO] You may need to manually start the frontend with: cd frontend && npm run dev")
-
-    # Open the web GUI in the default browser
-    if frontend_running:
-        webbrowser.open(f"http://{local_ip}:{FRONTEND_PORT}")
-        print(f"Web GUI launched at http://{local_ip}:{FRONTEND_PORT}")
-        print(f"Other computers can access the GUI at: http://{local_ip}:{FRONTEND_PORT}")
+    # Initialize network singleton (unless disabled)
+    singleton = None
+    if not args.no_singleton:
+        singleton = NetworkSingleton()
+        if not singleton.start():
+            return 1
     else:
-        print(f"Backend API available at http://{local_ip}:{BACKEND_PORT}")
-        print(f"Other computers can access the API at: http://{local_ip}:{BACKEND_PORT}")
+        print("[WARNING] Network singleton protection disabled")
 
     try:
-        if args.headless:
-            print("Headless mode not implemented in this version.")
-            print("Please use the web interface or implement headless mode.")
+        print(f"[DEBUG] Starting backend on port {BACKEND_PORT}...")
+        backend_proc = start_backend()
+        
+        frontend_proc = None
+        if FRONTEND_DEV:
+            print(f"[DEBUG] Starting frontend on port {FRONTEND_PORT}...")
+            frontend_proc = start_frontend()
+        
+        print("[DEBUG] Waiting for servers to start...")
+        time.sleep(3)  # Give servers more time to start
+        
+        # Check if servers are running
+        local_ip = get_local_ip()
+        backend_running = check_port(local_ip, BACKEND_PORT)
+        frontend_running = check_port(local_ip, FRONTEND_PORT)
+        
+        print(f"[DEBUG] Backend running: {backend_running}")
+        print(f"[DEBUG] Frontend running: {frontend_running}")
+        
+        if not backend_running:
+            print(f"[ERROR] Backend failed to start on port {BACKEND_PORT}")
+            return 1
+        
+        if not frontend_running:
+            print(f"[WARNING] Frontend may not be running on port {FRONTEND_PORT}")
+            print("[INFO] You may need to manually start the frontend with: cd frontend && npm run dev")
+
+        # Open the web GUI in the default browser
+        if frontend_running:
+            webbrowser.open(f"http://{local_ip}:{FRONTEND_PORT}")
+            print(f"Web GUI launched at http://{local_ip}:{FRONTEND_PORT}")
+            print(f"Other computers can access the GUI at: http://{local_ip}:{FRONTEND_PORT}")
         else:
-            print("Press Ctrl+C to stop the servers")
-        # Wait for interrupt
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\nKeyboard interrupt received. Exiting.")
+            print(f"Backend API available at http://{local_ip}:{BACKEND_PORT}")
+            print(f"Other computers can access the API at: http://{local_ip}:{BACKEND_PORT}")
+
+        try:
+            if args.headless:
+                print("Headless mode not implemented in this version.")
+                print("Please use the web interface or implement headless mode.")
+            else:
+                print("Press Ctrl+C to stop the servers")
+            # Wait for interrupt
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nKeyboard interrupt received. Exiting.")
+        finally:
+            print("[DEBUG] Terminating processes...")
+            backend_proc.terminate()
+            if frontend_proc:
+                frontend_proc.terminate()
+            backend_proc.wait()
+            if frontend_proc:
+                frontend_proc.wait()
+            print("All processes terminated. Goodbye!")
+        
+        return 0
+        
     finally:
-        print("[DEBUG] Terminating processes...")
-        backend_proc.terminate()
-        if frontend_proc:
-            frontend_proc.terminate()
-        backend_proc.wait()
-        if frontend_proc:
-            frontend_proc.wait()
-        print("All processes terminated. Goodbye!")
-    
-    return 0
+        # Clean up singleton
+        if singleton:
+            singleton.stop()
 
 
 if __name__ == "__main__":
