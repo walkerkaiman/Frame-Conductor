@@ -158,8 +158,11 @@ async def websocket_progress(websocket: WebSocket):
     await websocket.accept()
     ws_clients.add(websocket)
     try:
+        # Send initial state
+        await websocket.send_json(progress_state)
+        # Keep connection alive with frequent updates for smooth visual feedback
         while True:
+            await asyncio.sleep(0.016)  # ~60fps for smooth updates
             await websocket.send_json(progress_state)
-            await asyncio.sleep(0.1)
     except WebSocketDisconnect:
         ws_clients.discard(websocket) 

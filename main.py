@@ -71,8 +71,18 @@ def main():
         except:
             return False
     
-    backend_running = check_port('localhost', BACKEND_PORT)
-    frontend_running = check_port('localhost', FRONTEND_PORT)
+    def get_local_ip():
+        try:
+            # Connect to a remote address to determine local IP
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
+        except:
+            return "localhost"
+    
+    local_ip = get_local_ip()
+    backend_running = check_port(local_ip, BACKEND_PORT)
+    frontend_running = check_port(local_ip, FRONTEND_PORT)
     
     print(f"[DEBUG] Backend running: {backend_running}")
     print(f"[DEBUG] Frontend running: {frontend_running}")
@@ -85,12 +95,17 @@ def main():
         print(f"[WARNING] Frontend may not be running on port {FRONTEND_PORT}")
         print("[INFO] You may need to manually start the frontend with: cd frontend && npm run dev")
 
+    # Use the local IP address for network access
+    local_ip = get_local_ip()
+    
     # Open the web GUI in the default browser
     if frontend_running:
-        webbrowser.open(f"http://localhost:{FRONTEND_PORT}")
-        print(f"Web GUI launched at http://localhost:{FRONTEND_PORT}")
+        webbrowser.open(f"http://{local_ip}:{FRONTEND_PORT}")
+        print(f"Web GUI launched at http://{local_ip}:{FRONTEND_PORT}")
+        print(f"Other computers can access the GUI at: http://{local_ip}:{FRONTEND_PORT}")
     else:
-        print(f"Backend API available at http://localhost:{BACKEND_PORT}")
+        print(f"Backend API available at http://{local_ip}:{BACKEND_PORT}")
+        print(f"Other computers can access the API at: http://{local_ip}:{BACKEND_PORT}")
 
     try:
         if args.headless:

@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
-const API_URL = 'http://localhost:9000/api';
-const WS_URL = 'ws://localhost:9000/ws/progress';
+// Use the current window location to determine API URLs for network access
+const getApiUrl = () => {
+  const hostname = window.location.hostname;
+  return `http://${hostname}:9000/api`;
+};
+
+const getWsUrl = () => {
+  const hostname = window.location.hostname;
+  return `ws://${hostname}:9000/ws/progress`;
+};
 
 function App() {
   // State for config fields
@@ -12,14 +20,19 @@ function App() {
   const [status, setStatus] = useState('Ready');
   const [currentFrame, setCurrentFrame] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  // Host IP for network access
+  const [hostIP, setHostIP] = useState('');
   // Progress
   const percent = totalFrames > 0 ? Math.floor((currentFrame / totalFrames) * 100) : 0;
   // WebSocket ref
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Load config on mount
+  // Load config and set host IP on mount
   useEffect(() => {
-    fetch(`${API_URL}/config`)
+    // Set the host IP for display
+    setHostIP(window.location.hostname);
+    
+    fetch(`${getApiUrl()}/config`)
       .then(res => res.json())
       .then(cfg => {
         if (cfg.total_frames) setTotalFrames(cfg.total_frames);
@@ -30,7 +43,7 @@ function App() {
 
   // Connect to WebSocket for real-time progress
   useEffect(() => {
-    const ws = new WebSocket(WS_URL);
+    const ws = new WebSocket(getWsUrl());
     wsRef.current = ws;
     ws.onmessage = (event) => {
       try {
@@ -48,18 +61,18 @@ function App() {
   const handlePauseResume = () => {
     if (status === 'Ready' || status === 'Complete') {
       // Start sending
-      fetch(`${API_URL}/start`, { method: 'POST' });
+      fetch(`${getApiUrl()}/start`, { method: 'POST' });
       setStatus('Sending frames...');
       setIsPaused(false);
     } else {
       // Toggle pause/resume
-      fetch(`${API_URL}/pause`, { method: 'POST' });
+      fetch(`${getApiUrl()}/pause`, { method: 'POST' });
       setIsPaused((prev) => !prev);
       setStatus(isPaused ? 'Sending frames...' : 'Paused');
     }
   };
   const handleReset = () => {
-    fetch(`${API_URL}/reset`, { method: 'POST' });
+    fetch(`${getApiUrl()}/reset`, { method: 'POST' });
     setCurrentFrame(0);
     setStatus('Ready');
     setIsPaused(false);
@@ -67,7 +80,7 @@ function App() {
   const handleSave = () => {
     const payload = { total_frames: totalFrames, frame_rate: frameRate };
     console.log('Sending config payload:', payload);
-    fetch(`${API_URL}/config`, {
+    fetch(`${getApiUrl()}/config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -88,6 +101,11 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col items-center py-8">
       <h1 className="text-4xl font-bold text-indigo-700 mb-6 drop-shadow">Frame Conductor</h1>
+      <div className="bg-indigo-100 rounded-lg px-4 py-2 mb-4 border border-indigo-200">
+        <p className="text-sm text-indigo-700">
+          <span className="font-semibold">Network Access:</span> http://<b>{hostIP}</b>:5173
+        </p>
+      </div>
       <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md mb-8">
         <h2 className="text-xl font-semibold text-indigo-600 mb-4">Configuration</h2>
         <label className="block mb-4">
