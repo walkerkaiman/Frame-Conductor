@@ -39,183 +39,15 @@ import webbrowser
 import os
 import socket
 import shutil
-import threading
-import json
-from typing import Optional
+from utils.network_singleton import NetworkSingleton
 
 # Configuration constants
 BACKEND_PORT = 9000
 FRONTEND_PORT = 5173  # Default Vite dev server port
 FRONTEND_DEV = True  # Set to True to launch React dev server automatically
-SINGLETON_PORT = 9001  # Port for singleton detection
-SINGLETON_TIMEOUT = 5  # Seconds to wait for singleton check
 
 
-class NetworkSingleton:
-    """
-    Network-wide singleton mechanism to ensure only one instance runs per network.
-    
-    Uses UDP broadcasting to detect if another instance is already running.
-    Sends periodic heartbeat messages and listens for other instances.
-    """
-    
-    def __init__(self, port: int = SINGLETON_PORT):
-        self.port = port
-        self.socket: Optional[socket.socket] = None
-        self.is_running = False
-        self.heartbeat_thread: Optional[threading.Thread] = None
-        self.listener_thread: Optional[threading.Thread] = None
-        self.local_ip = get_local_ip()
-        self.instance_id = f"{self.local_ip}:{BACKEND_PORT}:{FRONTEND_PORT}"
-        
-    def start(self) -> bool:
-        """
-        Start the singleton mechanism.
-        
-        Returns:
-            bool: True if no other instance is running, False otherwise
-        """
-        try:
-            # Create UDP socket
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            self.socket.bind(('', self.port))
-            self.socket.settimeout(1.0)
-            
-            # Check for existing instances
-            if self._check_for_existing_instances():
-                print(f"[ERROR] Another Frame Conductor instance is already running on the network")
-                print(f"[ERROR] Only one instance is allowed per network")
-                return False
-            
-            # Start heartbeat and listener threads
-            self.is_running = True
-            self.heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
-            self.listener_thread = threading.Thread(target=self._listener_loop, daemon=True)
-            self.heartbeat_thread.start()
-            self.listener_thread.start()
-            
-            print(f"[INFO] Network singleton started - this instance: {self.instance_id}")
-            return True
-            
-        except Exception as e:
-            print(f"[ERROR] Failed to start network singleton: {e}")
-            return False
-    
-    def stop(self) -> None:
-        """Stop the singleton mechanism and clean up resources."""
-        self.is_running = False
-        if self.socket:
-            try:
-                self.socket.close()
-            except:
-                pass
-            self.socket = None
-    
-    def _check_for_existing_instances(self) -> bool:
-        """
-        Check if another instance is already running on the network.
-        
-        Returns:
-            bool: True if another instance is detected, False otherwise
-        """
-        print(f"[INFO] Checking for existing Frame Conductor instances...")
-        
-        # Send broadcast message to check for existing instances
-        check_message = {
-            "type": "instance_check",
-            "instance_id": self.instance_id,
-            "timestamp": time.time()
-        }
-        
-        try:
-            if not self.socket:
-                return False
-                
-            # Broadcast the check message
-            self.socket.sendto(json.dumps(check_message).encode(), ('<broadcast>', self.port))
-            
-            # Listen for responses
-            start_time = time.time()
-            while time.time() - start_time < SINGLETON_TIMEOUT:
-                try:
-                    if not self.socket:
-                        break
-                    data, addr = self.socket.recvfrom(1024)
-                    if addr[0] != self.local_ip:  # Ignore our own messages
-                        response = json.loads(data.decode())
-                        if response.get("type") == "instance_response":
-                            other_instance = response.get("instance_id", "unknown")
-                            print(f"[ERROR] Found existing instance: {other_instance} at {addr[0]}")
-                            return True
-                except socket.timeout:
-                    continue
-                except Exception as e:
-                    print(f"[WARNING] Error checking for instances: {e}")
-                    continue
-            
-            print(f"[INFO] No existing instances found")
-            return False
-            
-        except Exception as e:
-            print(f"[WARNING] Error during instance check: {e}")
-            return False
-    
-    def _heartbeat_loop(self) -> None:
-        """Send periodic heartbeat messages to announce this instance."""
-        while self.is_running:
-            try:
-                if not self.socket:
-                    break
-                heartbeat_message = {
-                    "type": "heartbeat",
-                    "instance_id": self.instance_id,
-                    "timestamp": time.time()
-                }
-                self.socket.sendto(json.dumps(heartbeat_message).encode(), ('<broadcast>', self.port))
-                time.sleep(2)  # Send heartbeat every 2 seconds
-            except Exception as e:
-                print(f"[WARNING] Error sending heartbeat: {e}")
-                time.sleep(5)  # Wait longer on error
-    
-    def _listener_loop(self) -> None:
-        """Listen for messages from other instances."""
-        while self.is_running:
-            try:
-                if not self.socket:
-                    break
-                data, addr = self.socket.recvfrom(1024)
-                if addr[0] == self.local_ip:  # Ignore our own messages
-                    continue
-                
-                try:
-                    message = json.loads(data.decode())
-                    message_type = message.get("type")
-                    
-                    if message_type == "instance_check":
-                        # Respond to instance check
-                        if self.socket:
-                            response = {
-                                "type": "instance_response",
-                                "instance_id": self.instance_id,
-                                "timestamp": time.time()
-                            }
-                            self.socket.sendto(json.dumps(response).encode(), (addr[0], self.port))
-                        
-                    elif message_type == "heartbeat":
-                        # Log other instance heartbeat
-                        other_instance = message.get("instance_id", "unknown")
-                        print(f"[WARNING] Detected another instance: {other_instance} at {addr[0]}")
-                        
-                except json.JSONDecodeError:
-                    continue
-                    
-            except socket.timeout:
-                continue
-            except Exception as e:
-                print(f"[WARNING] Error in listener loop: {e}")
-                time.sleep(1)
+
 
 
 def start_backend() -> subprocess.Popen:
@@ -322,7 +154,11 @@ def main() -> int:
     # Initialize network singleton (unless disabled)
     singleton = None
     if not args.no_singleton:
-        singleton = NetworkSingleton()
+        def on_conflict(instance_id: str):
+            print(f"[ERROR] Another Frame Conductor instance is already running on the network")
+            print(f"[ERROR] Only one instance is allowed per network")
+        
+        singleton = NetworkSingleton(on_conflict_callback=on_conflict)
         if not singleton.start():
             return 1
     else:

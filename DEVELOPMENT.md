@@ -39,6 +39,7 @@ Frame-Conductor/
 │   └── tests/             # Frontend tests
 ├── utils/
 │   ├── sacn_sender.py     # sACN communication logic
+│   ├── network_singleton.py # Network-wide singleton protection
 │   ├── config_manager.py  # Configuration management
 │   └── headless_utils.py  # Headless mode utilities
 ├── Tests/                 # Backend test suite
