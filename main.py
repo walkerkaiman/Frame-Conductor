@@ -2,11 +2,28 @@
 """
 Frame Conductor - Main Entry Point
 
-A standalone application for sending sACN frame numbers to Universe 1.
-This application can be run independently of the Interaction framework.
+A modern web application for sending sACN frame numbers to Universe 999.
+This application provides a React frontend with FastAPI backend for real-time
+control and monitoring of sACN frame transmission.
+
+Features:
+- Web-based interface accessible from any browser
+- Network accessibility for multi-device control
+- Real-time progress updates via WebSocket
+- Configuration persistence and multi-browser synchronization
 
 Usage:
     python main.py [--headless] [--target-frame N] [--fps X]
+
+Arguments:
+    --headless: Run in headless mode (not implemented in current version)
+    --target-frame N: Set total frames to send (default: 1000)
+    --fps X: Set frame rate in frames per second (default: 30)
+
+Network Access:
+    The application automatically detects your local IP address and provides
+    URLs for both local and network access. Other devices on your network
+    can access the interface using the displayed network URL.
 """
 
 import subprocess
@@ -15,25 +32,43 @@ import time
 import argparse
 import webbrowser
 import os
-# from gui import FrameConductorGUI  # Removed old GUI
-# from utils.sacn_sender import SACNSender  # Only needed for headless mode
-# from utils.headless_utils import print_headless_instructions, headless_progress_bar  # Only needed for headless mode
+import socket
+import shutil
 
+# Configuration constants
 BACKEND_PORT = 9000
 FRONTEND_PORT = 5173  # Default Vite dev server port
 FRONTEND_DEV = True  # Set to True to launch React dev server automatically
 
 
-def start_backend():
-    # Start FastAPI server with uvicorn
+def start_backend() -> subprocess.Popen:
+    """
+    Start the FastAPI backend server using uvicorn.
+    
+    Returns:
+        subprocess.Popen: Process object for the backend server
+        
+    Note:
+        The backend is configured to bind to all network interfaces (0.0.0.0)
+        to allow access from other devices on the network.
+    """
     return subprocess.Popen([
         sys.executable, "-m", "uvicorn", "api_server:app",
         "--host", "0.0.0.0", "--port", str(BACKEND_PORT)
     ])
 
-def start_frontend():
-    # Use shutil.which to find npm in PATH
-    import shutil
+
+def start_frontend() -> subprocess.Popen:
+    """
+    Start the React frontend development server using npm.
+    
+    Returns:
+        subprocess.Popen: Process object for the frontend server
+        
+    Note:
+        Attempts to find npm in PATH, with fallbacks for common Windows locations.
+        The frontend is configured to bind to all network interfaces for network access.
+    """
     npm_path = shutil.which('npm')
     if not npm_path:
         # Fallback to common Windows npm locations
@@ -44,7 +79,61 @@ def start_frontend():
     return subprocess.Popen([npm_path, "run", "dev"], cwd="frontend")
 
 
-def main():
+def check_port(host: str, port: int, timeout: int = 2) -> bool:
+    """
+    Check if a port is open and accepting connections.
+    
+    Args:
+        host (str): Hostname or IP address to check
+        port (int): Port number to check
+        timeout (int): Connection timeout in seconds
+        
+    Returns:
+        bool: True if port is open, False otherwise
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except:
+        return False
+
+
+def get_local_ip() -> str:
+    """
+    Get the local IP address for network access.
+    
+    This function determines the local IP address by attempting to connect
+    to a remote address (8.8.8.8:80) and reading the local socket address.
+    
+    Returns:
+        str: Local IP address, or "localhost" if detection fails
+    """
+    try:
+        # Connect to a remote address to determine local IP
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except:
+        return "localhost"
+
+
+def main() -> int:
+    """
+    Main application entry point.
+    
+    This function:
+    1. Parses command line arguments
+    2. Starts the backend FastAPI server
+    3. Starts the frontend React development server (if enabled)
+    4. Waits for servers to start and verifies they're running
+    5. Opens the web interface in the default browser
+    6. Displays network access information
+    7. Waits for user interruption (Ctrl+C)
+    8. Gracefully shuts down all processes
+    
+    Returns:
+        int: Exit code (0 for success, 1 for failure)
+    """
     parser = argparse.ArgumentParser(description="Frame Conductor - sACN Frame Sender")
     parser.add_argument("--headless", action="store_true", help="Run in headless (no-GUI) mode")
     parser.add_argument("--target-frame", type=int, default=1000, help="Total frames (default: 1000)")
@@ -63,23 +152,6 @@ def main():
     time.sleep(3)  # Give servers more time to start
     
     # Check if servers are running
-    import socket
-    def check_port(host, port):
-        try:
-            with socket.create_connection((host, port), timeout=2):
-                return True
-        except:
-            return False
-    
-    def get_local_ip():
-        try:
-            # Connect to a remote address to determine local IP
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.connect(("8.8.8.8", 80))
-                return s.getsockname()[0]
-        except:
-            return "localhost"
-    
     local_ip = get_local_ip()
     backend_running = check_port(local_ip, BACKEND_PORT)
     frontend_running = check_port(local_ip, FRONTEND_PORT)
@@ -95,9 +167,6 @@ def main():
         print(f"[WARNING] Frontend may not be running on port {FRONTEND_PORT}")
         print("[INFO] You may need to manually start the frontend with: cd frontend && npm run dev")
 
-    # Use the local IP address for network access
-    local_ip = get_local_ip()
-    
     # Open the web GUI in the default browser
     if frontend_running:
         webbrowser.open(f"http://{local_ip}:{FRONTEND_PORT}")
@@ -109,7 +178,8 @@ def main():
 
     try:
         if args.headless:
-            print("Headless mode not implemented in this scaffold.")
+            print("Headless mode not implemented in this version.")
+            print("Please use the web interface or implement headless mode.")
         else:
             print("Press Ctrl+C to stop the servers")
         # Wait for interrupt
@@ -126,6 +196,9 @@ def main():
         if frontend_proc:
             frontend_proc.wait()
         print("All processes terminated. Goodbye!")
+    
+    return 0
+
 
 if __name__ == "__main__":
-    main() 
+    sys.exit(main()) 

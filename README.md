@@ -1,87 +1,118 @@
 # Frame Conductor
 
-A standalone application for sending sACN frame numbers to Universe 999. This application can be run independently of the Interaction framework.
-
----
-
-## Port Numbers
-
-- **Backend API (FastAPI):** http://localhost:9000
-- **Frontend (React/Vite):** http://localhost:5173
-
-When you run `python main.py`, the backend API will start on port 9000 and the React frontend will start on port 5173. The main script will also open the frontend in your default web browser automatically.
+A modern web application for sending sACN frame numbers to Universe 999. Built with React frontend and FastAPI backend, this application provides real-time control and monitoring of sACN frame transmission with network accessibility.
 
 ---
 
 ## Features
 
+- **Modern Web Interface**: React-based GUI accessible from any web browser
+- **Network Accessibility**: Accessible from any device on your local network
+- **Real-time Synchronization**: Multiple browsers stay in sync automatically
 - **Configurable Frame Numbers**: Send frame numbers from 0 to 65535
-- **Adjustable Frame Rate**: Set custom FPS (1-120) or use presets (15, 24, 25, 30, 60)
-- **Real-time Progress**: Visual progress bar and status updates
+- **Adjustable Frame Rate**: Set custom FPS (1-120)
+- **Real-time Progress**: Live progress updates via WebSocket
 - **Configuration Persistence**: Settings are automatically saved and loaded
 - **Playback Controls**: Start, pause/resume, and reset functionality
+- **Multi-browser Support**: Control from multiple devices simultaneously
 
-## Installation
+## Quick Start
 
-1. Install the required dependencies:
+1. **Install Dependencies**:
    ```bash
+   # Backend dependencies
    pip install -r requirements.txt
+   
+   # Frontend dependencies
+   cd frontend
+   npm install
    ```
 
-2. Run the application:
+2. **Run the Application**:
    ```bash
    python main.py
    ```
-   - The backend API will be available at http://localhost:9000
-   - The web GUI will be available at http://localhost:5173 (opened automatically)
+   
+   This will:
+   - Start the FastAPI backend on port 9000
+   - Start the React frontend on port 5173
+   - Open the web interface in your default browser
+   - Display network access URLs for other devices
+
+## Network Access
+
+The application is designed for network accessibility:
+
+- **Local Access**: http://localhost:5173
+- **Network Access**: http://[YOUR_IP]:5173 (displayed when starting)
+- **Backend API**: http://[YOUR_IP]:9000
+
+Other computers on your local network can access the interface using the displayed network URL.
 
 ## Project Structure
 
 ```
-Frame Conductor/
-├── main.py              # Application entry point
-├── gui.py               # GUI components and user interface
-├── sacn_sender.py       # sACN communication logic
-├── config_manager.py    # Configuration loading and saving
-├── requirements.txt     # Python dependencies
-├── README.md           # This file
-└── sacn_sender_config.json  # Configuration file (auto-generated)
+Frame-Conductor/
+├── main.py                 # Application entry point
+├── api_server.py           # FastAPI backend server
+├── frontend/               # React frontend application
+│   ├── src/
+│   │   ├── App.tsx        # Main React component
+│   │   └── ...
+│   ├── package.json       # Frontend dependencies
+│   └── vite.config.ts     # Vite configuration
+├── utils/
+│   ├── sacn_sender.py     # sACN communication logic
+│   ├── config_manager.py  # Configuration management
+│   └── headless_utils.py  # Headless mode utilities
+├── Tests/                 # Backend test suite
+├── requirements.txt       # Python dependencies
+└── README.md             # This file
 ```
 
-## Modules
+## Architecture
 
-### main.py
-The application entry point that creates the main window and starts the GUI.
+### Backend (FastAPI)
+- **Port**: 9000
+- **Framework**: FastAPI with uvicorn
+- **Features**:
+  - RESTful API endpoints for configuration and control
+  - WebSocket for real-time progress updates
+  - sACN frame transmission management
+  - Configuration persistence
 
-### gui.py
-Contains the `FrameConductorGUI` class that handles all user interface components:
-- Configuration panel with frame number and FPS settings
-- Status display showing current frame and target
-- Control buttons (Start, Pause, Reset)
-- Progress bar
-- Information panel
+### Frontend (React)
+- **Port**: 5173
+- **Framework**: React with TypeScript
+- **Build Tool**: Vite
+- **Features**:
+  - Modern, responsive web interface
+  - Real-time WebSocket communication
+  - Network-accessible design
+  - Multi-browser synchronization
 
-### sacn_sender.py
-Contains the `SACNSender` class that handles sACN communication:
-- sACN library initialization and management
-- Frame encoding (MSB/LSB in DMX channels 1 and 2)
-- Threaded frame sending with configurable frame rate
-- Status tracking and callback system
+## API Endpoints
 
-### config_manager.py
-Contains the `ConfigManager` class that handles configuration:
-- JSON file loading and saving
-- Configuration validation
-- Default value management
+### HTTP Endpoints
+- `GET /api/config` - Get current configuration
+- `POST /api/config` - Update configuration
+- `POST /api/start` - Start frame transmission
+- `POST /api/pause` - Pause/resume transmission
+- `POST /api/reset` - Reset to frame 0
+
+### WebSocket
+- `ws://[HOST]:9000/ws/progress` - Real-time progress updates
 
 ## Configuration
 
-The application automatically creates a `sacn_sender_config.json` file with your settings:
+The application automatically creates a `sacn_sender_config.json` file:
 
 ```json
 {
-  "target_frame": 1000,
-  "frame_rate": 30
+  "total_frames": 1000,
+  "frame_rate": 30,
+  "universe": 999,
+  "frame_length": 512
 }
 ```
 
@@ -96,74 +127,111 @@ The application sends to **Universe 999** by default.
 
 ## Usage
 
-1. **Set Target Frame**: Enter the number of frames to send (0-65535)
-2. **Set Frame Rate**: 
-   - Type a custom FPS value (1-120)
-   - Or click preset buttons (15, 24, 25, 30, 60)
-3. **Start Sending**: Click "▶ Start" to begin sending frames
-4. **Control Playback**: Use "⏸ Pause" and "🔄 Reset" as needed
-5. **Save Settings**: Click "💾 Save Config" to manually save configuration
+1. **Access the Interface**: Open the web interface in any browser
+2. **Configure Settings**:
+   - Set Total Frames (1-65535)
+   - Set Frame Rate (1-120 fps)
+   - Click "💾 Save Config" to save settings
+3. **Control Transmission**:
+   - Click "▶ Start" to begin sending frames
+   - Use "⏸ Pause" to pause/resume
+   - Use "🔄 Reset" to reset to frame 0
+4. **Monitor Progress**: Watch real-time progress bar and frame counter
+
+## Multi-browser Features
+
+- **Real-time Sync**: Configuration changes sync across all connected browsers
+- **Shared Control**: Any browser can control the frame transmission
+- **Live Updates**: Progress updates appear on all connected devices
+- **Network Access**: Access from any device on your local network
 
 ## Dependencies
 
+### Backend
+- **fastapi**: Modern web framework
+- **uvicorn**: ASGI server
 - **sacn**: sACN (Streaming ACN) library for DMX over Ethernet
-- **tkinter**: GUI framework (included with Python)
+- **websockets**: WebSocket support
+
+### Frontend
+- **react**: UI framework
+- **typescript**: Type safety
+- **vite**: Build tool and dev server
+- **tailwindcss**: Styling
+
+## Installation
+
+### Prerequisites
+- Python 3.8+
+- Node.js 16+
+- npm
+
+### Setup
+```bash
+# Clone the repository
+git clone [repository-url]
+cd Frame-Conductor
+
+# Install backend dependencies
+pip install -r requirements.txt
+
+# Install frontend dependencies
+cd frontend
+npm install
+cd ..
+
+# Run the application
+python main.py
+```
+
+## Development
+
+### Running in Development Mode
+```bash
+# Terminal 1: Backend
+python main.py
+
+# Terminal 2: Frontend (optional, main.py starts it automatically)
+cd frontend
+npm run dev
+```
+
+### Testing
+```bash
+# Backend tests
+python -m pytest Tests/
+
+# Frontend tests
+cd frontend
+npm test
+```
 
 ## Troubleshooting
 
 ### sACN Library Not Available
-If you see "sACN library not available", install it with:
 ```bash
 pip install sacn
 ```
 
+### Network Access Issues
+- Ensure your firewall allows connections on ports 5173 and 9000
+- Check that the application is binding to `0.0.0.0` (not just localhost)
+
 ### Configuration Issues
-If the configuration file becomes corrupted, delete `sacn_sender_config.json` and restart the application to use default settings.
+Delete `sacn_sender_config.json` and restart to use default settings.
 
-## Development
+## Headless Mode
 
-This application is designed to be modular and maintainable:
-- Each module has a single responsibility
-- Clear separation between GUI, business logic, and configuration
-- Type hints for better code documentation
-- Comprehensive error handling 
+For terminal-only operation:
 
-# Headless Mode (No GUI)
-
-Frame Conductor can be run in headless (no-GUI) mode for use in terminals or scripts. This mode provides interactive keyboard controls and a real-time progress bar in the terminal.
-
-## Launching Headless Mode
-
-Run with the `--headless` flag:
-
-```
+```bash
 python main.py --headless [--target-frame N] [--fps X]
 ```
 
-- `--headless` : Run without the GUI, in terminal mode
-- `--target-frame N` : Set the target frame number (default: 1000)
-- `--fps X` : Set the frame rate in frames per second (default: 30)
+- `--headless`: Run without web interface
+- `--target-frame N`: Set target frame number
+- `--fps X`: Set frame rate
 
-## Example
+## License
 
-```
-python main.py --headless --target-frame 5000 --fps 24
-```
-
-## Keyboard Controls (while running)
-
-When running in headless mode, you can control the sender interactively:
-
-- `p` : Play/Pause
-- `r` : Reset (sets frame to 0 and pauses)
-- `q` : Quit
-
-A real-time progress bar will show:
-- Current progress as a percentage
-- Current frame and target frame
-- Current status (Running, Paused, Reset, Stopped)
-
-## Notes
-- The program starts in Paused state. Press `p` to begin sending frames.
-- All settings available in the GUI (target frame, FPS) can be set via command-line arguments in headless mode.
-- The headless mode uses the same backend logic as the GUI, so results are consistent between both modes. 
+[Add your license information here] 
