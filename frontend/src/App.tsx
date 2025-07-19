@@ -49,8 +49,12 @@ function App() {
       try {
         const data = JSON.parse(event.data);
         if (typeof data.frame === 'number') setCurrentFrame(data.frame);
-        // if (typeof data.total_frames === 'number') setTotalFrames(data.total_frames); // Prevent overwriting user input
         if (typeof data.status === 'string') setStatus(data.status);
+        // Handle config update messages specifically
+        if (data.type === 'config_update' && data.config && typeof data.config === 'object') {
+          if (data.config.total_frames) setTotalFrames(data.config.total_frames);
+          if (data.config.frame_rate) setFrameRate(data.config.frame_rate);
+        }
       } catch {}
     };
     ws.onclose = () => { setStatus('Disconnected'); };
@@ -91,6 +95,15 @@ function App() {
         setStatus('Ready');
         setIsPaused(false);
         setCurrentFrame(0);
+        
+        // Fetch the updated configuration to ensure UI reflects the saved values
+        return fetch(`${getApiUrl()}/config`);
+      })
+      .then(res => res.json())
+      .then(cfg => {
+        console.log('Updated config from server:', cfg);
+        if (cfg.total_frames) setTotalFrames(cfg.total_frames);
+        if (cfg.frame_rate) setFrameRate(cfg.frame_rate);
       })
       .catch(err => {
         console.error('Config save error:', err);

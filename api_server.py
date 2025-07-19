@@ -44,6 +44,12 @@ progress_state = {
     'status': 'Ready',
     'percent': 0
 }
+
+# Separate state for config updates
+config_state = {
+    'type': 'config_update',
+    'config': config.copy()
+}
 ws_clients = set()
 
 # --- Helper Functions ---
@@ -109,6 +115,10 @@ async def update_config(request: Request):
             sender.universe = config.get('universe', 999)
             sender.frame_length = config.get('frame_length', 512)
             logging.info(f"Sender updated: universe={sender.universe}, frame_length={sender.frame_length}")
+            # Update config state and broadcast to WebSocket clients
+            config_state['config'] = config.copy()
+            # Broadcast config update to all connected clients
+            asyncio.create_task(broadcast_config_update())
             if sender.is_running:
                 need_to_stop = True
         logging.info("config_lock released.")
@@ -152,6 +162,16 @@ async def reset_sender():
     update_progress(0, 'Ready')
     return {"success": True}
 
+async def broadcast_config_update():
+    """Broadcast config update to all connected WebSocket clients."""
+    if ws_clients:
+        clients = list(ws_clients)
+        for client in clients:
+            try:
+                await client.send_json(config_state)
+            except:
+                ws_clients.discard(client)
+
 # --- WebSocket Endpoint ---
 @app.websocket("/ws/progress")
 async def websocket_progress(websocket: WebSocket):
@@ -160,6 +180,8 @@ async def websocket_progress(websocket: WebSocket):
     try:
         # Send initial state
         await websocket.send_json(progress_state)
+        # Send initial config state
+        await websocket.send_json(config_state)
         # Keep connection alive with frequent updates for smooth visual feedback
         while True:
             await asyncio.sleep(0.016)  # ~60fps for smooth updates
