@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const APP_URL = 'http://localhost:5173';
-const API_URL = 'http://127.0.0.1:9000/api';
+const API_URL = 'http://localhost:9000/api';
 
 // Helper to wait for backend to process
 async function waitForStatus(page, expected, timeout = 3000) {

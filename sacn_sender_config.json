@@ -1,5 +1,5 @@
 {
-  "total_frames": 15,
-  "frame_rate": 10,
+  "total_frames": 10000,
+  "frame_rate": 30,
   "universe": 999
 }

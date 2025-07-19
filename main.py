@@ -32,10 +32,15 @@ def start_backend():
     ])
 
 def start_frontend():
-    # Use full path to npm.cmd for Windows compatibility
-    npm_path = r"C:\Program Files\nodejs\npm.cmd"
-    if not os.path.exists(npm_path):
-        npm_path = "npm"  # Fallback to system H
+    # Use shutil.which to find npm in PATH
+    import shutil
+    npm_path = shutil.which('npm')
+    if not npm_path:
+        # Fallback to common Windows npm locations
+        npm_path = r"C:\Program Files\nodejs\npm.cmd"
+        if not os.path.exists(npm_path):
+            npm_path = "npm"  # Final fallback
+    print(f"[DEBUG] Using npm path: {npm_path}")
     return subprocess.Popen([npm_path, "run", "dev"], cwd="frontend")
 
 
@@ -46,26 +51,59 @@ def main():
     parser.add_argument("--fps", type=int, default=30, help="Frame rate (default: 30)")
     args = parser.parse_args()
 
+    print(f"[DEBUG] Starting backend on port {BACKEND_PORT}...")
     backend_proc = start_backend()
+    
     frontend_proc = None
     if FRONTEND_DEV:
+        print(f"[DEBUG] Starting frontend on port {FRONTEND_PORT}...")
         frontend_proc = start_frontend()
-    time.sleep(2)  # Give servers time to start
+    
+    print("[DEBUG] Waiting for servers to start...")
+    time.sleep(3)  # Give servers more time to start
+    
+    # Check if servers are running
+    import socket
+    def check_port(host, port):
+        try:
+            with socket.create_connection((host, port), timeout=2):
+                return True
+        except:
+            return False
+    
+    backend_running = check_port('localhost', BACKEND_PORT)
+    frontend_running = check_port('localhost', FRONTEND_PORT)
+    
+    print(f"[DEBUG] Backend running: {backend_running}")
+    print(f"[DEBUG] Frontend running: {frontend_running}")
+    
+    if not backend_running:
+        print(f"[ERROR] Backend failed to start on port {BACKEND_PORT}")
+        return 1
+    
+    if not frontend_running:
+        print(f"[WARNING] Frontend may not be running on port {FRONTEND_PORT}")
+        print("[INFO] You may need to manually start the frontend with: cd frontend && npm run dev")
 
     # Open the web GUI in the default browser
-    webbrowser.open(f"http://localhost:{FRONTEND_PORT}")
+    if frontend_running:
+        webbrowser.open(f"http://localhost:{FRONTEND_PORT}")
+        print(f"Web GUI launched at http://localhost:{FRONTEND_PORT}")
+    else:
+        print(f"Backend API available at http://localhost:{BACKEND_PORT}")
 
     try:
         if args.headless:
             print("Headless mode not implemented in this scaffold.")
         else:
-            print(f"Web GUI launched at http://localhost:{FRONTEND_PORT}")
+            print("Press Ctrl+C to stop the servers")
         # Wait for interrupt
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         print("\nKeyboard interrupt received. Exiting.")
     finally:
+        print("[DEBUG] Terminating processes...")
         backend_proc.terminate()
         if frontend_proc:
             frontend_proc.terminate()

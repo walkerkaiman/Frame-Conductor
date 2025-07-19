@@ -52,12 +52,38 @@ def run_playwright():
     npx_cmd = 'npx'
     if os.name == 'nt':
         npx_cmd = shutil.which('npx') or 'npx.cmd'
+    npm_cmd = 'npm'
+    if os.name == 'nt':
+        npm_cmd = shutil.which('npm') or 'npm.cmd'
     frontend_port = 5173
     frontend_hosts = ['127.0.0.1', 'localhost']
+    
     # Check if frontend is already running on any host
-    if any(is_port_in_use(host, frontend_port) for host in frontend_hosts):
+    frontend_running = any(is_port_in_use(host, frontend_port) for host in frontend_hosts)
+    frontend_process = None
+    
+    if frontend_running:
         print(f"[DEBUG] Detected running frontend on {frontend_hosts} port {frontend_port}. Using existing server.")
-        print(f"[DEBUG] Running Playwright tests against existing frontend...")
+    else:
+        print(f"[DEBUG] Frontend not running. Starting frontend development server...")
+        try:
+            frontend_process = subprocess.Popen([npm_cmd, 'run', 'dev'], cwd=frontend_dir, 
+                                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Wait for frontend to start
+            if not wait_for_port('localhost', frontend_port, timeout=30):
+                print(f"[ERROR] Frontend failed to start within 30 seconds.")
+                if frontend_process:
+                    frontend_process.terminate()
+                return 1
+            print(f"[DEBUG] Frontend started successfully on port {frontend_port}.")
+        except Exception as e:
+            print(f"[ERROR] Failed to start frontend: {e}")
+            if frontend_process:
+                frontend_process.terminate()
+            return 1
+    
+    try:
+        print(f"[DEBUG] Running Playwright tests against frontend...")
         result = subprocess.run([
             npx_cmd, 'playwright', 'test', 'tests/'
         ], cwd=frontend_dir, capture_output=True, text=True)
@@ -66,11 +92,18 @@ def run_playwright():
             print(result.stderr)
         if 'No tests found' in result.stdout or 'No tests found' in result.stderr:
             print("No Playwright tests were found or executed. Check your test file names and config.")
-        print(f"[DEBUG] Playwright tests finished against existing frontend.")
+        print(f"[DEBUG] Playwright tests finished.")
         return result.returncode
-    else:
-        print(f"[ERROR] Frontend is NOT running on any of {frontend_hosts} port {frontend_port}. Please start the frontend (npm run dev) before running tests.")
-        return 1
+    finally:
+        # Clean up frontend process if we started it
+        if frontend_process:
+            print(f"[DEBUG] Terminating frontend process...")
+            frontend_process.terminate()
+            try:
+                frontend_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                frontend_process.kill()
+            print(f"[DEBUG] Frontend process terminated.")
 
 def main():
     py_status = run_pytest()
