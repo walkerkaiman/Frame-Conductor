@@ -39,6 +39,7 @@ import os
 from utils.sacn_sender import SACNSender
 import logging
 from typing import Dict, Any, Set
+import socket
 
 # Configuration constants
 CONFIG_FILE = 'sacn_sender_config.json'
@@ -292,32 +293,50 @@ async def start_sender() -> Dict[str, Any]:
 @app.post("/api/pause")
 async def pause_sender() -> Dict[str, Any]:
     """
-    Pause or resume sACN frame transmission.
+    Pause sACN frame transmission.
     
-    This endpoint toggles the pause state of the sACN sender.
-    If the sender is running and paused, it resumes. If it's running
-    and not paused, it pauses.
+    This endpoint explicitly pauses the sACN sender if it's currently running.
     
     Returns:
         Dict[str, Any]: Success status
     """
     try:
-        if sender.is_running:
-            if sender.is_paused:
-                sender.resume()
-                update_progress(status='Sending frames...')
-                logging.info("sACN transmission resumed")
-            else:
-                sender.pause()
-                update_progress(status='Paused')
-                logging.info("sACN transmission paused")
+        if sender.is_running and not sender.is_paused:
+            sender.pause()
+            update_progress(status='Paused')
+            logging.info("sACN transmission paused")
+            return {"success": True}
         else:
-            logging.warning("Cannot pause/resume: sender is not running")
+            logging.warning("Cannot pause: sender is not running or already paused")
+            return {"success": False, "error": "Sender is not running or already paused"}
             
-        return {"success": True}
-        
     except Exception as e:
-        logging.error(f"Exception in pause/resume: {e}", exc_info=True)
+        logging.error(f"Exception in pause: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/resume")
+async def resume_sender() -> Dict[str, Any]:
+    """
+    Resume sACN frame transmission.
+    
+    This endpoint explicitly resumes the sACN sender if it's currently paused.
+    
+    Returns:
+        Dict[str, Any]: Success status
+    """
+    try:
+        if sender.is_running and sender.is_paused:
+            sender.resume()
+            update_progress(status='Sending frames...')
+            logging.info("sACN transmission resumed")
+            return {"success": True}
+        else:
+            logging.warning("Cannot resume: sender is not running or not paused")
+            return {"success": False, "error": "Sender is not running or not paused"}
+            
+    except Exception as e:
+        logging.error(f"Exception in resume: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 
@@ -341,6 +360,51 @@ async def reset_sender() -> Dict[str, Any]:
     except Exception as e:
         logging.error(f"Exception in reset: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
+
+
+@app.get("/api/local_ip")
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't have to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return {"ip": IP}
+
+
+@app.get("/api/state")
+async def get_sender_state() -> Dict[str, Any]:
+    """
+    Get the current state of the sACN sender.
+    
+    Returns:
+        Dict[str, Any]: Current state information including status and available actions
+    """
+    try:
+        if not sender.is_running:
+            state = "stopped"
+            available_actions = ["start"]
+        elif sender.is_paused:
+            state = "paused"
+            available_actions = ["resume", "reset"]
+        else:
+            state = "running"
+            available_actions = ["pause", "reset"]
+        
+        return {
+            "state": state,
+            "available_actions": available_actions,
+            "current_frame": progress_state.get('frame', 0),
+            "total_frames": progress_state.get('total_frames', 0)
+        }
+        
+    except Exception as e:
+        logging.error(f"Exception getting sender state: {e}", exc_info=True)
+        return {"state": "error", "available_actions": [], "error": str(e)}
 
 
 # --- WebSocket Endpoint ---

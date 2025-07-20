@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import './App.css';
 
 /**
@@ -20,21 +21,19 @@ import './App.css';
 
 // API URL helper functions
 /**
- * Get the API base URL for the current host
- * @returns {string} The API base URL (e.g., "http://192.168.1.100:9000/api")
+ * Get the API base URL for the backend
+ * @returns {string} The API base URL (e.g., "http://<host>:9000/api")
  */
 const getApiUrl = (): string => {
-  const hostname = window.location.hostname;
-  return `http://${hostname}:9000/api`;
+  return `http://${window.location.hostname}:9000/api`;
 };
 
 /**
- * Get the WebSocket URL for the current host
- * @returns {string} The WebSocket URL (e.g., "ws://192.168.1.100:9000/ws/progress")
+ * Get the WebSocket URL for the backend
+ * @returns {string} The WebSocket URL (e.g., "ws://<host>:9000/ws/progress")
  */
 const getWsUrl = (): string => {
-  const hostname = window.location.hostname;
-  return `ws://${hostname}:9000/ws/progress`;
+  return `ws://${window.location.hostname}:9000/ws/progress`;
 };
 
 // Type definitions for better type safety
@@ -65,7 +64,7 @@ function App(): React.JSX.Element {
   // State for sender control
   const [status, setStatus] = useState<string>('Ready');
   const [currentFrame, setCurrentFrame] = useState<number>(0);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [senderState, setSenderState] = useState<string>('stopped');
   
   // Host IP for network access display
   const [hostIP, setHostIP] = useState<string>('');
@@ -81,9 +80,12 @@ function App(): React.JSX.Element {
    * Fetches the current configuration from the backend and updates the UI
    */
   useEffect(() => {
-    // Set the host IP for display in the network access section
-    setHostIP(window.location.hostname);
-    
+    // Fetch the local IP from the backend for display in the network access section
+    fetch(`http://${window.location.hostname}:9000/api/local_ip`)
+      .then(res => res.json())
+      .then(data => setHostIP(data.ip))
+      .catch(() => setHostIP(window.location.hostname));
+
     // Fetch initial configuration from backend
     fetch(`${getApiUrl()}/config`)
       .then(res => res.json())
@@ -93,6 +95,24 @@ function App(): React.JSX.Element {
       })
       .catch((error) => {
         console.error('Failed to load configuration:', error);
+      });
+
+    // Fetch initial sender state
+    fetch(`${getApiUrl()}/state`)
+      .then(res => res.json())
+      .then((stateData) => {
+        setSenderState(stateData.state);
+        setCurrentFrame(stateData.current_frame);
+        if (stateData.state === 'paused') {
+          setStatus('Paused');
+        } else if (stateData.state === 'running') {
+          setStatus('Sending frames...');
+        } else {
+          setStatus('Ready');
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to load sender state:', error);
       });
   }, []);
 
@@ -116,6 +136,14 @@ function App(): React.JSX.Element {
         // Handle status updates
         if ('status' in data && typeof data.status === 'string') {
           setStatus(data.status);
+          // Update sender state based on status
+          if (data.status === 'Paused') {
+            setSenderState('paused');
+          } else if (data.status === 'Sending frames...') {
+            setSenderState('running');
+          } else if (data.status === 'Ready' || data.status === 'Complete') {
+            setSenderState('stopped');
+          }
         }
         
         // Handle configuration updates from other browsers
@@ -139,20 +167,25 @@ function App(): React.JSX.Element {
   }, []);
 
   /**
-   * Handle start/pause/resume button clicks
-   * Sends appropriate API requests to control frame transmission
+   * Handle toggle button clicks
+   * Performs the appropriate action based on current sender state
    */
-  const handlePauseResume = (): void => {
-    if (status === 'Ready' || status === 'Complete') {
+  const handleToggle = (): void => {
+    if (senderState === 'stopped') {
       // Start sending frames
       fetch(`${getApiUrl()}/start`, { method: 'POST' });
       setStatus('Sending frames...');
-      setIsPaused(false);
-    } else {
-      // Toggle pause/resume
+      setSenderState('running');
+    } else if (senderState === 'running') {
+      // Pause transmission
       fetch(`${getApiUrl()}/pause`, { method: 'POST' });
-      setIsPaused((prev) => !prev);
-      setStatus(isPaused ? 'Sending frames...' : 'Paused');
+      setStatus('Paused');
+      setSenderState('paused');
+    } else if (senderState === 'paused') {
+      // Resume transmission
+      fetch(`${getApiUrl()}/resume`, { method: 'POST' });
+      setStatus('Sending frames...');
+      setSenderState('running');
     }
   };
 
@@ -164,7 +197,6 @@ function App(): React.JSX.Element {
     fetch(`${getApiUrl()}/reset`, { method: 'POST' });
     setCurrentFrame(0);
     setStatus('Ready');
-    setIsPaused(false);
   };
 
   /**
@@ -189,7 +221,6 @@ function App(): React.JSX.Element {
         console.log('Configuration save response:', data);
         if (data.success) {
           setStatus('Ready');
-          setIsPaused(false);
           setCurrentFrame(0);
           
           // Fetch the updated configuration to ensure UI reflects the saved values
@@ -210,15 +241,28 @@ function App(): React.JSX.Element {
       });
   };
 
+  // Generate the URL for the QR code
+  const networkUrl = `http://${hostIP}:5173`;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col items-center py-8">
       {/* Application Header */}
-      <h1 className="text-4xl font-bold text-indigo-700 mb-6 drop-shadow">Frame Conductor</h1>
+      <h1 className="text-4xl font-bold text-indigo-700 mb-6 drop-shadow">Conductor</h1>
       
-      {/* Network Access Information */}
-      <div className="bg-indigo-100 rounded-lg px-4 py-2 mb-4 border border-indigo-200">
+      {/* QR Code and Network Access Information */}
+      <div className="bg-indigo-100 rounded-lg px-4 py-2 mb-4 border border-indigo-200 flex flex-col items-center">
+        {hostIP && (
+          <div className="mb-2">
+            <QRCodeSVG 
+              value={networkUrl}
+              size={128}
+              level="M"
+              includeMargin={true}
+            />
+          </div>
+        )}
         <p className="text-sm text-indigo-700">
-          <span className="font-semibold">Network Access:</span> http://<b>{hostIP}</b>:5173
+          http://<b>{hostIP}</b>:5173
         </p>
       </div>
       
@@ -274,11 +318,11 @@ function App(): React.JSX.Element {
         <h2 className="text-lg font-semibold text-indigo-600 mb-2">Controls</h2>
         <div className="flex gap-4 mb-2">
           <button
-            onClick={handlePauseResume}
+            onClick={handleToggle}
             disabled={status === 'Disconnected'}
             className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-6 rounded disabled:opacity-50 transition"
           >
-            {(status === 'Ready' || status === 'Complete') ? '▶ Start' : (isPaused ? '▶ Resume' : '⏸ Pause')}
+            {senderState === 'stopped' ? '▶ Start' : (senderState === 'running' ? '⏸ Pause' : '▶ Resume')}
           </button>
           <button 
             onClick={handleReset} 
